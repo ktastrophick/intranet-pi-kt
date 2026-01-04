@@ -358,38 +358,95 @@ class SolicitudViewSet(viewsets.ModelViewSet):
 # ======================================================
 
 class LicenciaMedicaViewSet(viewsets.ModelViewSet):
-    """ViewSet para gestión de licencias médicas"""
+    """
+    ViewSet actualizado: 
+    - Los usuarios suben sus propias licencias.
+    - Privacidad: se eliminó el filtro por 'tipo'.
+    - Flujo: Aprobación por niveles 3 y 4.
+    """
     serializer_class = LicenciaMedicaSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_fields = ['tipo', 'usuario__area']
-    search_fields = ['numero_licencia', 'usuario__nombre', 'usuario__rut']
-    ordering = ['-fecha_inicio']
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     
+    # Filtros: quitamos 'tipo' y agregamos 'estado'
+    filterset_fields = ['estado', 'usuario__area']
+    search_fields = ['numero_licencia', 'usuario__nombre', 'usuario__rut']
+    ordering_fields = ['fecha_inicio', 'creado_en']
+    ordering = ['-creado_en']
+
     def get_queryset(self):
         user = self.request.user
         
-        # Dirección y subdirección ven todas
+        # 1. Dirección y Subdirección (Nivel 3 y 4): Ven TODO
         if user.rol.nivel >= 3:
-            return LicenciaMedica.objects.select_related('usuario', 'subida_por').all()
+            return LicenciaMedica.objects.select_related('usuario', 'revisada_por').all()
         
-        # Jefatura ve las de su área
+        # 2. Jefatura (Nivel 2): Ve las de su área para gestión interna
         elif user.rol.nivel == 2:
-            return LicenciaMedica.objects.filter(usuario__area=user.area)
+            return LicenciaMedica.objects.filter(usuario__area=user.area).select_related('usuario')
         
-        # Funcionario ve solo las suyas
-        else:
-            return LicenciaMedica.objects.filter(usuario=user)
-    
+        # 3. Funcionario (Nivel 1): Solo ve las SUYAS
+        return LicenciaMedica.objects.filter(usuario=user)
+
     def perform_create(self, serializer):
-        """Registrar quién subió la licencia"""
-        serializer.save(subida_por=self.request.user)
-    
+        """
+        Al crear una licencia, el sistema asigna automáticamente:
+        - El usuario: quien está logueado.
+        - El estado: 'pendiente' (por defecto en el modelo).
+        """
+        serializer.save(usuario=self.request.user)
+
+    @action(detail=True, methods=['post'], url_path='gestionar-licencia')
+    def gestionar(self, request, pk=None):
+        """
+        Acción especial para que Subdirección/Dirección apruebe o rechace.
+        POST /api/licencias/{id}/gestionar-licencia/
+        Payload: {"nuevo_estado": "aprobada", "comentarios": "..."}
+        """
+        licencia = self.get_object()
+        user = request.user
+
+        # Seguridad: Solo niveles >= 3 pueden gestionar
+        if user.rol.nivel < 3:
+            return Response(
+                {"error": "No tiene permisos para aprobar o rechazar licencias."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        nuevo_estado = request.data.get('nuevo_estado')
+        comentarios = request.data.get('comentarios', '')
+
+        if nuevo_estado not in ['aprobada', 'rechazada']:
+            return Response(
+                {"error": "Estado no válido. Use 'aprobada' o 'rechazada'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Actualizamos la licencia con los datos del revisor
+        licencia.estado = nuevo_estado
+        licencia.revisada_por = user
+        licencia.comentarios_revision = comentarios
+        licencia.fecha_revision = timezone.now()
+        licencia.save()
+
+        return Response({
+            "status": f"Licencia {nuevo_estado} correctamente",
+            "revisor": user.get_nombre_completo()
+        })
+
+    @action(detail=False, methods=['get'])
+    def mis_licencias(self, request):
+        """Atajo para que el usuario vea solo su historial"""
+        licencias = LicenciaMedica.objects.filter(usuario=request.user)
+        serializer = self.get_serializer(licencias, many=True)
+        return Response(serializer.data)
+
     @action(detail=False, methods=['get'])
     def vigentes(self, request):
-        """Listar licencias vigentes"""
+        """Listar solo licencias aprobadas que están transcurriendo hoy"""
         hoy = timezone.now().date()
+        # Solo mostramos como "vigentes" las que ya fueron aprobadas
         licencias = self.get_queryset().filter(
+            estado='aprobada',
             fecha_inicio__lte=hoy,
             fecha_termino__gte=hoy
         )

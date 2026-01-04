@@ -371,20 +371,60 @@ class SolicitudAprobacionSerializer(serializers.Serializer):
 # ======================================================
 
 class LicenciaMedicaSerializer(serializers.ModelSerializer):
-    """Serializer para licencias médicas"""
+    """Serializer actualizado para licencias médicas (Enfoque en Privacidad y Flujo)"""
+    
+    # Campos de solo lectura para mostrar información amigable en el frontend
     usuario_nombre = serializers.CharField(source='usuario.get_nombre_completo', read_only=True)
     area_nombre = serializers.CharField(source='usuario.area.nombre', read_only=True)
-    subida_por_nombre = serializers.CharField(source='subida_por.get_nombre_completo', read_only=True)
-    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
-    esta_vigente = serializers.SerializerMethodField()
+    revisada_por_nombre = serializers.CharField(source='revisada_por.get_nombre_completo', read_only=True, default=None)
     
+    # Muestra el texto legible del estado (ej: "Pendiente de Revisión" en lugar de "pendiente")
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    
+    # Como en el modelo usamos @property para esta_vigente, se puede declarar así:
+    esta_vigente = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = LicenciaMedica
-        fields = '__all__'
-        read_only_fields = ('id', 'subida_en', 'actualizada_en')
-    
-    def get_esta_vigente(self, obj):
-        return obj.esta_vigente()
+        fields = [
+            'id', 
+            'numero_licencia', 
+            'usuario', 
+            'usuario_nombre', 
+            'area_nombre',
+            'fecha_inicio', 
+            'fecha_termino', 
+            'dias_totales', 
+            'documento_licencia',
+            'estado', 
+            'estado_display', 
+            'revisada_por', 
+            'revisada_por_nombre',
+            'comentarios_revision', 
+            'fecha_revision', 
+            'creado_en', 
+            'actualizada_en',
+            'esta_vigente'
+        ]
+        
+        # Campos que el usuario NO puede manipular al subir su licencia
+        read_only_fields = (
+            'id', 
+            'dias_totales', 
+            'estado', 
+            'revisada_por', 
+            'fecha_revision', 
+            'creado_en', 
+            'actualizada_en'
+        )
+
+    def validate(self, data):
+        """Validaciones de lógica de fechas"""
+        if data['fecha_inicio'] > data['fecha_termino']:
+            raise serializers.ValidationError({
+                "fecha_termino": "La fecha de término no puede ser anterior a la de inicio."
+            })
+        return data
 
 
 # ======================================================

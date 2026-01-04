@@ -11,15 +11,15 @@ import { FileUploader } from '@/components/common/licencias/FileUploader';
 import { LicenciasTable } from '@/components/common/licencias/LicenciasTable';
 import { LicenciaUploadModal, type LicenciaFormData } from '@/components/common/licencias/LicenciaUploadModal';
 import type { LicenciaMedica } from '@/types/licencia';
-import { calcularEstadoLicencia } from '@/types/licencia';
-import { mockLicencias } from '@/data/mockLicencias';
+// Eliminamos calcularEstadoLicencia si ahora el estado viene del backend (pendiente/aprobada)
 import { FileText, TrendingUp, Clock } from 'lucide-react';
 import { UnifiedNavbar } from '@/components/common/layout/UnifiedNavbar';
 import Footer from '@/components/common/layout/Footer';
 import { useAuth } from '@/api/contexts/AuthContext';
-import { usuarioService } from '@/api';
 import BannerLicencias from '@/components/images/banners_finales/BannerLicencias';
 
+
+import { mockLicencias } from '@/data/mockLicencias';
 
 // ======================================================
 // COMPONENTE PRINCIPAL
@@ -33,44 +33,20 @@ export const LicenciasMedicasPage: React.FC = () => {
   const { user } = useAuth();
   const [licencias, setLicencias] = useState<LicenciaMedica[]>(mockLicencias);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [empleados, setEmpleados] = useState<Array<{ id: string; nombre_completo: string }>>([]);
-  const [loading, setLoading] = useState(true);
 
   // ======================================================
   // EFECTOS
   // ======================================================
 
   useEffect(() => {
-    cargarEmpleados();
+
   }, []);
 
   // ======================================================
   // FUNCIONES
   // ======================================================
 
-  /**
-   * Cargar lista de empleados desde el backend
-   */
-  const cargarEmpleados = async () => {
-    try {
-      setLoading(true);
-      const data = await usuarioService.getAll();
-      setEmpleados(data.map((usuario: any) => ({
-        id: usuario.id,
-        nombre_completo: usuario.nombre_completo
-      })));
-    } catch (error) {
-      console.error('Error al cargar empleados:', error);
-      // En caso de error, usar datos de ejemplo
-      setEmpleados([
-        { id: '1', nombre_completo: 'Juan Pérez González' },
-        { id: '2', nombre_completo: 'María López Silva' },
-        { id: '3', nombre_completo: 'Carlos Rodríguez Muñoz' }
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
+
 
   // ======================================================
   // MANEJADORES DE EVENTOS
@@ -96,25 +72,17 @@ export const LicenciasMedicasPage: React.FC = () => {
   const handleSubmitLicencia = (data: LicenciaFormData) => {
     if (!data.archivo) return;
 
-    const fechaTermino = new Date(data.fechaTermino);
     
-    const nuevaLicencia: LicenciaMedica = {
-      id: `${Date.now()}`,
-      nombreArchivo: data.archivo.name,
-      tipoArchivo: data.archivo.type.includes('pdf') ? 'pdf' : 
-                   data.archivo.type.includes('jpeg') ? 'jpeg' :
-                   data.archivo.type.includes('jpg') ? 'jpg' : 'png',
-      tamanoArchivo: data.archivo.size,
-      fechaSubida: new Date(),
-      subidoPor: user?.nombre_completo || 'Usuario Actual',
-      cargoUsuario: user?.cargo || 'Subdirector/a',
-      urlArchivo: URL.createObjectURL(data.archivo),
-      empleadoNombre: data.empleadoNombre,
-      fechaInicio: new Date(data.fechaInicio),
-      fechaTermino: fechaTermino,
-      diasLicencia: calcularDiasLicencia(data.fechaInicio, data.fechaTermino),
-      // ✅ CALCULAR ESTADO AUTOMÁTICAMENTE
-      status: calcularEstadoLicencia(fechaTermino)
+    const nuevaLicencia: any = {
+      id: crypto.randomUUID(),
+      numero_licencia: "PENDIENTE", // El folio real lo dará el backend
+      usuario_nombre: user?.nombre_completo || 'Mi Licencia',
+      fecha_inicio: data.fechaInicio,
+      fecha_termino: data.fechaTermino,
+      dias_totales: calcularDiasLicencia(data.fechaInicio, data.fechaTermino),
+      estado: 'pendiente', // Toda licencia nueva entra como pendiente
+      documento_licencia: URL.createObjectURL(data.archivo),
+      creado_en: new Date().toISOString()
     };
 
     setLicencias([nuevaLicencia, ...licencias]);
@@ -138,43 +106,24 @@ export const LicenciasMedicasPage: React.FC = () => {
   /**
    * Calcular días de licencia
    */
-  const calcularDiasLicencia = (fechaInicio: string, fechaTermino: string): number => {
-    const inicio = new Date(fechaInicio);
-    const termino = new Date(fechaTermino);
-    const diferencia = termino.getTime() - inicio.getTime();
-    return Math.ceil(diferencia / (1000 * 60 * 60 * 24)) + 1; // +1 para incluir ambos días
+  const calcularDiasLicencia = (inicio: string, termino: string): number => {
+    const dInicio = new Date(inicio);
+    const dTermino = new Date(termino);
+    const dif = dTermino.getTime() - dInicio.getTime();
+    return Math.ceil(dif / (1000 * 60 * 60 * 24)) + 1;
   };
 
   /**
    * Ver archivo (abrir en modal o nueva pestaña)
    */
-  const handleView = (licencia: LicenciaMedica) => {
-    console.log('Ver licencia:', licencia);
-    // En producción: abrir modal con preview o abrir en nueva pestaña
-    window.open(licencia.urlArchivo, '_blank');
+  const handleView = (licencia: any) => window.open(licencia.documento_licencia, '_blank');
+  const handleDownload = (licencia: any) => {
+     const link = document.createElement('a');
+     link.href = licencia.documento_licencia;
+     link.download = `licencia_${licencia.numero_licencia}.pdf`;
+     link.click();
   };
-
-  /**
-   * Descargar archivo
-   */
-  const handleDownload = (licencia: LicenciaMedica) => {
-    console.log('Descargar licencia:', licencia);
-    // En producción: descargar desde servidor
-    const link = document.createElement('a');
-    link.href = licencia.urlArchivo;
-    link.download = licencia.nombreArchivo;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  /**
-   * Eliminar licencia
-   */
-  const handleDelete = (licenciaId: string) => {
-    setLicencias(licencias.filter(l => l.id !== licenciaId));
-    console.log('Licencia eliminada:', licenciaId);
-  };
+  const handleDelete = (id: string) => setLicencias(licencias.filter(l => l.id !== id));
 
   // ======================================================
   // ESTADÍSTICAS
@@ -182,17 +131,9 @@ export const LicenciasMedicasPage: React.FC = () => {
 
   const stats = {
     total: licencias.length,
-    // ✅ CALCULAR VIGENTES Y VENCIDAS DINÁMICAMENTE
-    vigentes: licencias.filter(l => {
-      if (!l.fechaTermino) return false;
-      return calcularEstadoLicencia(l.fechaTermino) === 'vigente';
-    }).length,
-    vencidas: licencias.filter(l => {
-      if (!l.fechaTermino) return true; // Si no tiene fecha, se considera vencida
-      return calcularEstadoLicencia(l.fechaTermino) === 'vencida';
-    }).length
+    aprobadas: licencias.filter(l => l.estado === 'aprobada').length,
+    pendientes: licencias.filter(l => l.estado === 'pendiente').length
   };
-
   // ======================================================
   // RENDERIZADO
   // ======================================================
@@ -249,35 +190,32 @@ export const LicenciasMedicasPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Licencias vigentes */}
+              {/* Licencias aprobadas (antes decía vigentes) */}
               <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border-l-4 border-green-500">
                 <div className="flex items-center gap-3">
                   <div className="p-3 bg-white rounded-lg shadow-sm">
                     <TrendingUp className="w-6 h-6 text-green-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600 font-medium">
-                      Vigentes
-                    </p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {stats.vigentes}
-                    </p>
+                      <p className="text-sm text-gray-600 font-medium">Aprobadas</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {stats.aprobadas} {/* ANTES: stats.vigentes */}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Licencias vencidas */}
-              <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border-l-4 border-gray-500">
+              {/* Licencias pendientes (antes decía vencidas) */}
+              <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-4 border-l-4 border-yellow-500">
                 <div className="flex items-center gap-3">
                   <div className="p-3 bg-white rounded-lg shadow-sm">
-                    <Clock className="w-6 h-6 text-gray-600" />
+                    <Clock className="w-6 h-6 text-yellow-600" />
                   </div>
+                  
                   <div>
-                    <p className="text-sm text-gray-600 font-medium">
-                      Vencidas
-                    </p>
+                    <p className="text-sm text-gray-600 font-medium">Pendientes</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {stats.vencidas}
+                      {stats.pendientes} {/* ANTES: stats.vencidas */}
                     </p>
                   </div>
                 </div>
@@ -300,21 +238,16 @@ export const LicenciasMedicasPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Componente de carga */}
-          <FileUploader
-            onOpenModal={handleOpenModal}
-            hasFiles={licencias.length > 0}
-          />
+          {/* FIX: FileUploader ya no recibe hasFiles */}
+          <FileUploader onOpenModal={handleOpenModal} />
 
-          {/* Modal de carga de licencia */}
+          {/* FIX: LicenciaUploadModal ya no recibe empleados */}
           <LicenciaUploadModal
             isOpen={isModalOpen}
             onClose={handleCloseModal}
             onSubmit={handleSubmitLicencia}
-            empleados={empleados}
           />
 
-          {/* TABLA DE LICENCIAS */}
           <LicenciasTable
             licencias={licencias}
             onView={handleView}

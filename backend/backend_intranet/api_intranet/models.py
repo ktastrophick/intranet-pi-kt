@@ -626,60 +626,95 @@ class Solicitud(models.Model):
 
 class LicenciaMedica(models.Model):
     """
-    Registro de licencias médicas de funcionarios
+    Registro de licencias médicas de funcionarios.
+    Rediseñado para privacidad (sin diagnóstico) y flujo de aprobación.
     """
-    TIPO_CHOICES = [
-        ('enfermedad', 'Enfermedad'),
-        ('maternidad', 'Maternidad'),
-        ('accidente_laboral', 'Accidente Laboral'),
-        ('accidente_comun', 'Accidente Común'),
-        ('otro', 'Otro'),
+    ESTADO_CHOICES = [
+        ('pendiente', 'Pendiente de Revisión'),
+        ('aprobada', 'Aprobada'),
+        ('rechazada', 'Rechazada'),
     ]
-    
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    numero_licencia = models.CharField(max_length=50, unique=True)
     
-    # Funcionario
-    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='licencias')
-    
-    # Detalles de la licencia
-    tipo = models.CharField(max_length=30, choices=TIPO_CHOICES, default='enfermedad')
+    # El folio es necesario para trámites administrativos, pero no revela la enfermedad
+    numero_licencia = models.CharField(
+        max_length=50, 
+        unique=True, 
+        verbose_name="Número de Folio"
+    )
+
+    # El usuario ahora puede subir su propia licencia
+    usuario = models.ForeignKey(
+        'Usuario', 
+        on_delete=models.CASCADE, 
+        related_name='licencias'
+    )
+
+    # Fechas de la licencia
     fecha_inicio = models.DateField()
     fecha_termino = models.DateField()
-    dias_totales = models.IntegerField()
     
-    # Documentos
-    documento_licencia = models.ImageField(upload_to='licencias/', help_text='Foto/escaneo de la licencia médica')
-    diagnostico = models.TextField(blank=True)
-    
-    # Auditoría
-    subida_por = models.ForeignKey(
-        Usuario,
+    # Campo calculado: se puede llenar automáticamente en el método save()
+    dias_totales = models.IntegerField(editable=False)
+
+    # Cambiamos ImageField por FileField para que acepten PDF, DOCX o Imágenes
+    # Si configuras S3 en settings.py, Django lo enviará allá automáticamente
+    documento_licencia = models.FileField(
+        upload_to='licencias/%Y/%m/', 
+        help_text='Cargue el documento o foto de su licencia (PDF, JPG, PNG)'
+    )
+
+    # Estado de la solicitud
+    estado = models.CharField(
+        max_length=20, 
+        choices=ESTADO_CHOICES, 
+        default='pendiente'
+    )
+
+    # Auditoría y Revisión (quien aprueba/rechaza, usualmente Subdirección/RRHH)
+    revisada_por = models.ForeignKey(
+        'Usuario',
         on_delete=models.SET_NULL,
         null=True,
-        related_name='licencias_subidas'
+        blank=True,
+        related_name='licencias_auditadas'
     )
-    subida_en = models.DateTimeField(auto_now_add=True)
+    comentarios_revision = models.TextField(
+        blank=True, 
+        help_text="Motivo de rechazo o notas de la revisión"
+    )
+    fecha_revision = models.DateTimeField(null=True, blank=True)
+
+    # Metadata automática
+    creado_en = models.DateTimeField(auto_now_add=True) # Fecha de registro
     actualizada_en = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         verbose_name = 'Licencia Médica'
         verbose_name_plural = 'Licencias Médicas'
         ordering = ['-fecha_inicio']
         indexes = [
-            models.Index(fields=['usuario', 'fecha_inicio']),
+            models.Index(fields=['usuario', 'estado']),
             models.Index(fields=['fecha_inicio', 'fecha_termino']),
         ]
-    
+
     def __str__(self):
-        return f"{self.numero_licencia} - {self.usuario.get_nombre_completo()}"
-    
+        return f"Licencia {self.numero_licencia} - {self.usuario.get_nombre_completo()}"
+
+    def save(self, *args, **kwargs):
+        """Calcula automáticamente los días totales antes de guardar"""
+        if self.fecha_inicio and self.fecha_termino:
+            delta = self.fecha_termino - self.fecha_inicio
+            # Se suma 1 porque si es del 1 al 1, es 1 día.
+            self.dias_totales = delta.days + 1
+        super().save(*args, **kwargs)
+
+    @property
     def esta_vigente(self):
-        """Verifica si la licencia está vigente"""
+        """Verifica si la licencia está transcurriendo hoy"""
         hoy = timezone.now().date()
         return self.fecha_inicio <= hoy <= self.fecha_termino
-
-
 # ======================================================
 # 5. GESTIÓN DE DOCUMENTOS Y ARCHIVOS
 # ======================================================

@@ -221,33 +221,76 @@ class SolicitudAdmin(admin.ModelAdmin):
 
 @admin.register(LicenciaMedica)
 class LicenciaMedicaAdmin(admin.ModelAdmin):
+    # Campos que se ven en la tabla principal
     list_display = [
-        'numero_licencia', 'usuario', 'tipo',
-        'fecha_inicio', 'fecha_termino', 'dias_totales',
-        'subida_por', 'subida_en'
+        'numero_licencia', 
+        'usuario', 
+        'estado',  # Nuevo: para ver rápido qué está pendiente
+        'fecha_inicio', 
+        'fecha_termino', 
+        'dias_totales',
+        'revisada_por', # Nuevo: para saber quién dio el visto bueno
+        'creado_en'
     ]
-    list_filter = ['tipo', 'fecha_inicio']
+    
+    # Filtros laterales: quitamos 'tipo', ponemos 'estado'
+    list_filter = ['estado', 'fecha_inicio', 'usuario__area']
+    
+    # Buscador
     search_fields = ['numero_licencia', 'usuario__nombre', 'usuario__rut']
+    
+    # Jerarquía por fecha para navegar por años/meses
     date_hierarchy = 'fecha_inicio'
-    ordering = ['-fecha_inicio']
+    ordering = ['-creado_en']
     
-    readonly_fields = ['subida_en', 'actualizada_en']
+    # Campos de solo lectura (importante para no corromper cálculos)
+    readonly_fields = [
+        'dias_totales', # Se calcula solo en el modelo
+        'creado_en', 
+        'actualizada_en', 
+        'fecha_revision'
+    ]
     
+    # Organización del formulario de edición
     fieldsets = (
-        ('Información de la Licencia', {
+        ('Información Básica', {
             'fields': (
-                'numero_licencia', 'usuario', 'tipo',
-                'fecha_inicio', 'fecha_termino', 'dias_totales'
+                'numero_licencia', 
+                'usuario', 
+                'documento_licencia'
             )
         }),
-        ('Detalles Médicos', {
-            'fields': ('diagnostico', 'documento_licencia')
+        ('Fechas de la Licencia', {
+            'fields': (
+                ('fecha_inicio', 'fecha_termino'), # En una misma línea
+                'dias_totales'
+            )
         }),
-        ('Registro', {
-            'fields': ('subida_por', 'subida_en', 'actualizada_en'),
-            'classes': ('collapse',)
+        ('Estado y Revisión', {
+            'fields': (
+                'estado', 
+                'revisada_por', 
+                'comentarios_revision', 
+                'fecha_revision'
+            ),
+            'description': 'Solo personal de Subdirección o Dirección debe modificar estos campos.'
+        }),
+        ('Metadata de Registro', {
+            'fields': ('creado_en', 'actualizada_en'),
+            'classes': ('collapse',) # Aparece oculto por defecto
         })
     )
+
+    def save_model(self, request, obj, form, change):
+        """
+        Opcional: Si un administrador cambia el estado desde el panel de Django,
+        registramos automáticamente que él fue quien lo hizo.
+        """
+        if 'estado' in form.changed_data and obj.estado != 'pendiente':
+            obj.revisada_por = request.user
+            from django.utils import timezone
+            obj.fecha_revision = timezone.now()
+        super().save_model(request, obj, form, change)
 
 
 # ======================================================
