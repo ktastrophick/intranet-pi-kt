@@ -1,21 +1,10 @@
-// ======================================================
-// COMPONENTE: LicenciasTable
-// Ubicación: src/components/common/LicenciasTable.tsx
-// Descripción: Tabla de licencias médicas cargadas
-// ======================================================
-
 'use client';
 
 import React from 'react';
 import { Card } from '@/components/ui/card';
 import type { LicenciaMedica } from '@/types/licencia';
-import { FILE_TYPE_CONFIG, STATUS_CONFIG, calcularEstadoLicencia } from '@/types/licencia';
-import { formatFileSize } from '@/data/mockLicencias';
-import { Eye, Download, Trash2, Calendar, User, Briefcase } from 'lucide-react';
-
-// ======================================================
-// INTERFACES
-// ======================================================
+import { FILE_TYPE_CONFIG, STATUS_CONFIG, getFileExtension } from '@/types/licencia';
+import { Eye, Download, Trash2, Calendar, User, Briefcase, FileText } from 'lucide-react';
 
 interface LicenciasTableProps {
   licencias: LicenciaMedica[];
@@ -24,11 +13,9 @@ interface LicenciasTableProps {
   onDelete: (licenciaId: string) => void;
 }
 
-// ======================================================
-// FUNCIONES AUXILIARES
-// ======================================================
-
-const formatDate = (date: Date): string => {
+// Helpers locales
+const formatDate = (dateStr: string) => {
+  const date = new Date(dateStr);
   return date.toLocaleDateString('es-ES', {
     day: '2-digit',
     month: '2-digit',
@@ -38,7 +25,8 @@ const formatDate = (date: Date): string => {
   });
 };
 
-const formatDateSimple = (date: Date): string => {
+const formatDateSimple = (dateStr: string) => {
+  const date = new Date(dateStr);
   return date.toLocaleDateString('es-ES', {
     day: '2-digit',
     month: '2-digit',
@@ -46,211 +34,121 @@ const formatDateSimple = (date: Date): string => {
   });
 };
 
-// ======================================================
-// COMPONENTE PRINCIPAL
-// ======================================================
-
 export const LicenciasTable: React.FC<LicenciasTableProps> = ({
   licencias,
   onView,
   onDownload,
   onDelete
 }) => {
-  if (licencias.length === 0) return null;
+  if (licencias.length === 0) return (
+    <div className="text-center p-10 bg-gray-50 rounded-xl border-2 border-dashed">
+      <p className="text-gray-500">No hay licencias registradas aún.</p>
+    </div>
+  );
 
   return (
     <Card className="overflow-hidden shadow-xl border-0">
-      {/* Header de la tabla */}
       <div className="bg-gradient-to-r from-gray-50 to-blue-50 px-6 py-4 border-b-2 border-gray-200">
         <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-          📋 Licencias Médicas Cargadas
+          📋 Licencias Médicas
           <span className="text-sm font-normal text-gray-600">
             ({licencias.length} {licencias.length === 1 ? 'registro' : 'registros'})
           </span>
         </h2>
       </div>
 
-      {/* Tabla */}
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                Archivo
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                Empleado
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                Período
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                Estado
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                Subido por
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                Fecha de subida
-              </th>
-              <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                Acciones
-              </th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Folio / Archivo</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Funcionario</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Período</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Estado</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Fecha Carga</th>
+              <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Acciones</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-100">
             {licencias.map((licencia, index) => {
-              const fileConfig = FILE_TYPE_CONFIG[licencia.tipoArchivo];
-              
-              // ✅ CALCULAR ESTADO AUTOMÁTICAMENTE BASADO EN FECHA DE TÉRMINO
-              const estadoActual = licencia.fechaTermino 
-                ? calcularEstadoLicencia(licencia.fechaTermino)
-                : 'vencida'; // Por defecto vencida si no hay fecha
-              
-              const statusConfig = STATUS_CONFIG[estadoActual];
+              const ext = getFileExtension(licencia.documento_licencia);
+              const fileConfig = FILE_TYPE_CONFIG[ext] || FILE_TYPE_CONFIG.default;
+              const statusConfig = STATUS_CONFIG[licencia.estado];
 
               return (
-                <tr 
-                  key={licencia.id}
-                  className="hover:bg-blue-50 transition-colors duration-150 animate-fadeIn"
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  {/* COLUMNA: Archivo */}
+                <tr key={licencia.id} className="hover:bg-blue-50 transition-colors duration-150">
+                  {/* ARCHIVO */}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className={`
-                        w-10 h-10 rounded-lg ${fileConfig.bgColor}
-                        flex items-center justify-center flex-shrink-0
-                      `}>
+                      <div className={`w-10 h-10 rounded-lg ${fileConfig.bgColor} flex items-center justify-center`}>
                         <span className="text-xl">{fileConfig.icon}</span>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate max-w-xs">
-                          {licencia.nombreArchivo}
+                        <p className="text-sm font-semibold text-gray-900 truncate max-w-[150px]">
+                          Folio: {licencia.numero_licencia}
                         </p>
-                        <p className="text-xs text-gray-500">
-                          {licencia.tipoArchivo.toUpperCase()} · {formatFileSize(licencia.tamanoArchivo)}
-                        </p>
+                        <p className="text-xs text-gray-500 uppercase">{ext}</p>
                       </div>
                     </div>
                   </td>
 
-                  {/* COLUMNA: Empleado */}
-                  <td className="px-6 py-4">
-                    {licencia.empleadoNombre ? (
-                      <div className="flex items-start gap-2">
-                        <User className="w-4 h-4 text-[#009DDC] mt-0.5 flex-shrink-0" />
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">
-                            {licencia.empleadoNombre}
-                          </p>
-                          {licencia.diasLicencia && (
-                            <p className="text-xs text-gray-500">
-                              {licencia.diasLicencia} {licencia.diasLicencia === 1 ? 'día' : 'días'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-sm text-gray-400">-</span>
-                    )}
-                  </td>
-
-                  {/* COLUMNA: Período */}
-                  <td className="px-6 py-4">
-                    {licencia.fechaInicio && licencia.fechaTermino ? (
-                      <div className="flex items-start gap-2">
-                        <Calendar className="w-4 h-4 text-[#52FFB8] mt-0.5 flex-shrink-0" />
-                        <div className="text-xs text-gray-600">
-                          <div>{formatDateSimple(licencia.fechaInicio)}</div>
-                          <div className="text-gray-400">al</div>
-                          <div>{formatDateSimple(licencia.fechaTermino)}</div>
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-sm text-gray-400">-</span>
-                    )}
-                  </td>
-
-                  {/* COLUMNA: Estado */}
-                  <td className="px-6 py-4">
-                    <span className={`
-                      inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold
-                      border ${statusConfig.badge}
-                    `}>
-                      {statusConfig.label}
-                    </span>
-                  </td>
-
-                  {/* COLUMNA: Subido por */}
+                  {/* FUNCIONARIO */}
                   <td className="px-6 py-4">
                     <div className="flex items-start gap-2">
-                      <Briefcase className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                      <User className="w-4 h-4 text-blue-500 mt-0.5" />
                       <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {licencia.subidoPor}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {licencia.cargoUsuario}
-                        </p>
+                        <p className="text-sm font-medium text-gray-900">{licencia.usuario_nombre || 'No asignado'}</p>
+                        <p className="text-xs text-gray-500">{licencia.area_nombre}</p>
                       </div>
                     </div>
                   </td>
 
-                  {/* COLUMNA: Fecha de subida */}
+                  {/* PERIODO */}
                   <td className="px-6 py-4">
-                    <p className="text-xs text-gray-600">
-                      {formatDate(licencia.fechaSubida)}
-                    </p>
+                    <div className="flex items-start gap-2">
+                      <Calendar className="w-4 h-4 text-emerald-500 mt-0.5" />
+                      <div className="text-xs text-gray-600">
+                        <span className="font-medium text-gray-900">{licencia.dias_totales} días</span>
+                        <div className="flex gap-1 text-gray-400">
+                          <span>{formatDateSimple(licencia.fecha_inicio)}</span>
+                          <span>-</span>
+                          <span>{formatDateSimple(licencia.fecha_termino)}</span>
+                        </div>
+                      </div>
+                    </div>
                   </td>
 
-                  {/* COLUMNA: Acciones */}
+                  {/* ESTADO */}
                   <td className="px-6 py-4">
-                    <div className="flex items-center justify-center gap-2">
-                      {/* Botón Ver */}
-                      <button
-                        onClick={() => onView(licencia)}
-                        className="
-                          p-2 rounded-lg
-                          text-blue-600 hover:bg-blue-50
-                          transition-colors duration-200
-                          group
-                        "
-                        title="Ver archivo"
-                      >
-                        <Eye className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                      </button>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusConfig.badge}`}>
+                      {statusConfig.label}
+                    </span>
+                    {licencia.esta_vigente && licencia.estado === 'aprobada' && (
+                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                        En curso
+                      </span>
+                    )}
+                  </td>
 
-                      {/* Botón Descargar */}
-                      <button
-                        onClick={() => onDownload(licencia)}
-                        className="
-                          p-2 rounded-lg
-                          text-green-600 hover:bg-green-50
-                          transition-colors duration-200
-                          group
-                        "
-                        title="Descargar archivo"
-                      >
-                        <Download className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                      </button>
+                  {/* FECHA CARGA */}
+                  <td className="px-6 py-4">
+                    <p className="text-xs text-gray-600">{formatDate(licencia.creado_en)}</p>
+                  </td>
 
-                      {/* Botón Eliminar */}
-                      <button
-                        onClick={() => {
-                          if (confirm('¿Estás seguro de eliminar esta licencia?')) {
-                            onDelete(licencia.id);
-                          }
-                        }}
-                        className="
-                          p-2 rounded-lg
-                          text-red-600 hover:bg-red-50
-                          transition-colors duration-200
-                          group
-                        "
-                        title="Eliminar archivo"
+                  {/* ACCIONES */}
+                  <td className="px-6 py-4 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <button onClick={() => onView(licencia)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => onDownload(licencia)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors">
+                        <Download className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => onDelete(licencia.id)} 
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       >
-                        <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </td>
