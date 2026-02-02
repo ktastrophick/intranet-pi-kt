@@ -1,7 +1,3 @@
-// ==========================
-// App.tsx - CORREGIDO PARA LOGIN
-// ==========================
-
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom"
 import { AuthProvider, useAuth } from "@/api/contexts/AuthContext"
 import { useEffect } from "react"
@@ -17,9 +13,10 @@ import LandingPage from "./pages/general/LandingPage"
 import { SoporteTecnicoPage } from "./pages/general/SoporteTecnicoPage"
 import { SolicitarDiasPage } from "./pages/general/SolicitarDiasPage"
 
-// ✅ PÁGINAS ADMIN UNIFICADAS (con permisos internos)
+// ✅ PÁGINAS ADMIN UNIFICADAS
 import { CalendarioAdminPage } from "./pages/admin/CalendarioAdminPage"
-import { LicenciasMedicasPage } from "./pages/admin/LicenciasMedicasPage"
+import { LicenciasMedicasPage } from "@/pages/admin/LicenciasMedicasPage" // Asegúrate que la ruta sea correcta (es la vista de funcionario)
+import { LicenciasAdminPage } from "./pages/admin/LicenciasAdminPage" // 👈 NUEVA IMPORTACIÓN
 import { AprobacionesAdminPage } from "./pages/admin/AprobacionesAdminPage"
 
 import ToastProvider from "./components/common/actividades/Toast"
@@ -88,7 +85,7 @@ function AppRoutes() {
       <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
 
-      {/* Rutas Protegidas - Generales */}
+      {/* Rutas Protegidas - Generales (Accesibles por todos) */}
       <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
       <Route path="/repositorio" element={<ProtectedRoute><ArchivosAdminPage /></ProtectedRoute>} />
       <Route path="/vacaciones" element={<ProtectedRoute><VacacionesPage /></ProtectedRoute>} />
@@ -98,13 +95,16 @@ function AppRoutes() {
       <Route path="/perfil" element={<ProtectedRoute><PerfilUsuarioPage /></ProtectedRoute>} />
       <Route path="/soporte" element={<ProtectedRoute><SoporteTecnicoPage /></ProtectedRoute>} />
       <Route path="/solicitar-dias" element={<ProtectedRoute><SolicitarDiasPage /></ProtectedRoute>} />
-
-      {/* ✅ CALENDARIO UNIFICADO - Una sola ruta para todos */}
       <Route path="/calendario" element={<ProtectedRoute><CalendarioAdminPage /></ProtectedRoute>} />
 
-      {/* Rutas Admin Exclusivas (sin versión general) */}
-      <Route path="/aprobaciones" element={<ProtectedRoute><AprobacionesAdminPage /></ProtectedRoute>} />
+      {/* ✅ LICENCIAS MÉDICAS: Vista para que cada funcionario suba la suya */}
       <Route path="/licencias" element={<ProtectedRoute><LicenciasMedicasPage /></ProtectedRoute>} />
+
+      {/* ✅ LICENCIAS MÉDICAS ADMIN: Vista para que la Subdirección valide */}
+      <Route path="/admin/licencias" element={<ProtectedRoute><LicenciasAdminPage /></ProtectedRoute>} />
+
+      {/* Rutas Admin de Solicitudes/Vacaciones */}
+      <Route path="/aprobaciones" element={<ProtectedRoute><AprobacionesAdminPage /></ProtectedRoute>} />
 
       {/* Ruta 404 */}
       <Route path="*" element={<Navigate to="/" replace />} />
