@@ -1,0 +1,63 @@
+# --- SEGURIDAD ---
+# Ignorar siempre variables de entorno
+.env
+.env.local
+.env.*.local
+*.env
+backend/**/.env
+
+# --- BACKEND (Python/Django) ---
+# Entorno virtual
+backend/env/
+venv/
+ENV/
+env.bak/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+
+# Archivos compilados
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Base de datos local (si usas SQLite)
+backend/**/db.sqlite3
+backend/**/db.sqlite3-journal
+
+# Archivos subidos por usuarios (Media)
+# Es mejor no subirlos a Git para no pesar el repo
+backend/backend_intranet/media/actividades/*
+backend/backend_intranet/media/anuncios/*
+backend/backend_intranet/media/licencias/*
+# Pero mantenemos las carpetas con un archivo .gitkeep si fuera necesario
+!backend/backend_intranet/media/.gitkeep
+
+# --- FRONTEND (Node/React) ---
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/coverage/
+frontend/*.zip
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/pnpm-debug.log*
+
+# --- SISTEMA Y EDITORES ---
+.vscode/
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

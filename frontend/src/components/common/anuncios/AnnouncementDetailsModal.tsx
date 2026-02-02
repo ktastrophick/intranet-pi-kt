@@ -58,17 +58,7 @@ const formatPublicationDate = (date: Date): string => {
 /**
  * Calcula hace cuánto tiempo fue publicado
  */
-const getTimeAgo = (date: Date): string => {
-  const now = new Date();
-  const diffInMs = now.getTime() - date.getTime();
-  const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
-  
-  if (diffInDays === 0) return 'Hoy';
-  if (diffInDays === 1) return 'Ayer';
-  if (diffInDays < 7) return `Hace ${diffInDays} días`;
-  if (diffInDays < 30) return `Hace ${Math.floor(diffInDays / 7)} semanas`;
-  return `Hace ${Math.floor(diffInDays / 30)} meses`;
-};
+
 
 /**
  * Calcula los días restantes hasta la expiración
@@ -150,9 +140,7 @@ export const AnnouncementDetailsModal: React.FC<AnnouncementDetailsModalProps> =
                 <p className="text-sm font-semibold text-gray-700">Fecha de Publicación</p>
                 <p className="text-sm text-gray-600">
                   {formatPublicationDate(announcement.publicationDate)}
-                  <span className="text-xs text-gray-500 ml-2">
-                    ({getTimeAgo(announcement.publicationDate)})
-                  </span>
+                  
                 </p>
               </div>
             </div>

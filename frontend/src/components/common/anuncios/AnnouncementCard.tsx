@@ -43,20 +43,7 @@ const formatPublicationDate = (date: Date): string => {
   return date.toLocaleDateString('es-ES', options);
 };
 
-/**
- * Calcula hace cuánto tiempo fue publicado
- */
-const getTimeAgo = (date: Date): string => {
-  const now = new Date();
-  const diffInMs = now.getTime() - date.getTime();
-  const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
-  
-  if (diffInDays === 0) return 'Hoy';
-  if (diffInDays === 1) return 'Ayer';
-  if (diffInDays < 7) return `Hace ${diffInDays} días`;
-  if (diffInDays < 30) return `Hace ${Math.floor(diffInDays / 7)} semanas`;
-  return `Hace ${Math.floor(diffInDays / 30)} meses`;
-};
+
 
 /**
  * Trunca el texto a un número de caracteres
@@ -99,7 +86,7 @@ export const AnnouncementCard: React.FC<AnnouncementCardProps> = ({
               <Calendar className="w-3.5 h-3.5 text-[#009DDC]" />
               <span>{formatPublicationDate(announcement.publicationDate)}</span>
               <span className="text-gray-400">•</span>
-              <span className="text-gray-500">{getTimeAgo(announcement.publicationDate)}</span>
+              
             </div>
           </div>
 

@@ -1,7 +1,7 @@
 // ======================================================
-// COMPONENTE: AnnouncementList (VERSION DEBUG)
+// COMPONENTE: AnnouncementList (VERSION 2 COLUMNAS)
 // Ubicación: src/components/common/anuncios/AnnouncementList.tsx
-// Descripción: Versión con manejo de errores para diagnosticar
+// Descripción: Lista de anuncios con disposición de 2 columnas
 // ======================================================
 
 'use client';
@@ -25,11 +25,11 @@ interface AnnouncementListProps {
 }
 
 // ======================================================
-// COMPONENTE DE SKELETON (Loading state)
+// COMPONENTE DE SKELETON (Loading state en 2 columnas)
 // ======================================================
 
 const AnnouncementSkeleton: React.FC = () => (
-  <div className="bg-white rounded-xl border-l-4 border-l-gray-300 shadow-lg overflow-hidden animate-pulse">
+  <div className="bg-white rounded-xl border-l-4 border-l-gray-300 shadow-lg overflow-hidden animate-pulse h-full">
     {/* Header skeleton */}
     <div className="bg-gray-100 p-6">
       <div className="h-6 bg-gray-200 rounded w-3/4 mb-3" />
@@ -62,15 +62,9 @@ export const AnnouncementList: React.FC<AnnouncementListProps> = ({
 
   // Manejador para abrir el modal de detalles
   const handleViewDetails = (announcement: Announcement) => {
-    console.log('Abriendo modal para:', announcement.title);
     setSelectedAnnouncement(announcement);
     setIsModalOpen(true);
   };
-
-  console.log('AnnouncementList renderizando:', { 
-    announcements: announcements?.length, 
-    isLoading 
-  });
 
   // ======================================================
   // ESTADO DE CARGA
@@ -84,9 +78,12 @@ export const AnnouncementList: React.FC<AnnouncementListProps> = ({
             Cargando comunicados oficiales...
           </span>
         </div>
-        {Array.from({ length: 3 }).map((_, index) => (
-          <AnnouncementSkeleton key={index} />
-        ))}
+        {/* Skeletons en grid de 2 columnas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <AnnouncementSkeleton key={index} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -97,21 +94,15 @@ export const AnnouncementList: React.FC<AnnouncementListProps> = ({
   if (!announcements || announcements.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-4">
-        {/* Ícono decorativo */}
         <div className="w-32 h-32 mb-6 rounded-full bg-gradient-to-br from-blue-100 to-gray-100 flex items-center justify-center">
           <FileSearch className="w-16 h-16 text-gray-400" />
         </div>
-
-        {/* Mensaje */}
         <h3 className="text-2xl font-bold text-gray-800 mb-2 text-center">
           No hay comunicados oficiales
         </h3>
         <p className="text-gray-600 text-center max-w-md mb-6">
-          Por el momento no hay comunicados publicados. 
-          Los nuevos comunicados aparecerán aquí cuando sean emitidos por la Dirección.
+          Por el momento no hay comunicados publicados.
         </p>
-
-        {/* Información adicional */}
         <div className="bg-blue-50 border-l-4 border-[#009DDC] p-4 rounded-lg max-w-md">
           <p className="text-sm text-gray-700">
             <strong className="text-[#009DDC]">Nota:</strong> Los comunicados oficiales 
@@ -128,8 +119,8 @@ export const AnnouncementList: React.FC<AnnouncementListProps> = ({
   try {
     return (
       <>
-        <div className="space-y-6">
-          {/* Contador de comunicados */}
+        <div className="space-y-8">
+          {/* Contador de comunicados (Ocupa todo el ancho arriba) */}
           <div className="flex items-center justify-between bg-white rounded-lg shadow-sm p-4 border-l-4 border-l-[#009DDC]">
             <div>
               <p className="text-sm font-medium text-gray-600">
@@ -144,25 +135,30 @@ export const AnnouncementList: React.FC<AnnouncementListProps> = ({
             </div>
           </div>
 
-          {/* Lista de comunicados */}
-          {announcements.map((announcement, index) => (
-            <div
-              key={announcement.id}
-              className="animate-fadeIn"
-              style={{ animationDelay: `${index * 100}ms` }}
-            >
-              <AnnouncementCard
-                announcement={announcement}
-                isAdminView={isAdminView}
-                onViewDetails={handleViewDetails}
-                onEdit={onEdit}
-                onDelete={onDelete}
-              />
-            </div>
-          ))}
+          {/* GRID DE COMUNICADOS: 1 col en móvil, 2 cols en desktop */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {announcements.map((announcement, index) => (
+              <div
+                key={announcement.id}
+                className="animate-fadeIn flex"
+                style={{ animationDelay: `${index * 100}ms` }}
+              >
+                {/* Envolvemos la card en un div con 'flex' para que todas tengan el mismo alto si es necesario */}
+                <div className="w-full h-full">
+                  <AnnouncementCard
+                    announcement={announcement}
+                    isAdminView={isAdminView}
+                    onViewDetails={handleViewDetails}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
 
-          {/* Mensaje al final de la lista */}
-          <div className="text-center py-6 text-sm text-gray-500">
+          {/* Mensaje al final de la lista (Ocupa todo el ancho abajo) */}
+          <div className="text-center py-6 text-sm text-gray-500 border-t border-gray-100">
             <p>Has visto todos los comunicados oficiales</p>
           </div>
         </div>

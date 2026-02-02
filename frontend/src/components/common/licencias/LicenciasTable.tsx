@@ -2,9 +2,9 @@
 
 import React from 'react';
 import { Card } from '@/components/ui/card';
-import type { LicenciaMedica } from '@/types/licencia';
+import type { LicenciaMedica, EstadoLicencia } from '@/types/licencia';
 import { FILE_TYPE_CONFIG, STATUS_CONFIG, getFileExtension } from '@/types/licencia';
-import { Eye, Download, Trash2, Calendar, User, Briefcase, FileText } from 'lucide-react';
+import { Eye, Download, Trash2, Calendar, User } from 'lucide-react';
 
 interface LicenciasTableProps {
   licencias: LicenciaMedica[];
@@ -15,6 +15,7 @@ interface LicenciasTableProps {
 
 // Helpers locales
 const formatDate = (dateStr: string) => {
+  if (!dateStr) return 'N/A';
   const date = new Date(dateStr);
   return date.toLocaleDateString('es-ES', {
     day: '2-digit',
@@ -26,6 +27,7 @@ const formatDate = (dateStr: string) => {
 };
 
 const formatDateSimple = (dateStr: string) => {
+  if (!dateStr) return 'N/A';
   const date = new Date(dateStr);
   return date.toLocaleDateString('es-ES', {
     day: '2-digit',
@@ -70,10 +72,18 @@ export const LicenciasTable: React.FC<LicenciasTableProps> = ({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-100">
-            {licencias.map((licencia, index) => {
+            {licencias.map((licencia) => {
+              // 1. Manejo seguro de la extensión del archivo
               const ext = getFileExtension(licencia.documento_licencia);
               const fileConfig = FILE_TYPE_CONFIG[ext] || FILE_TYPE_CONFIG.default;
-              const statusConfig = STATUS_CONFIG[licencia.estado];
+
+              // 2. CORRECCIÓN DEL ERROR: Manejo seguro del estado
+              // Si licencia.estado no existe en STATUS_CONFIG, usamos un fallback neutral
+              const estadoActual = licencia.estado as EstadoLicencia;
+              const statusConfig = STATUS_CONFIG[estadoActual] || {
+                label: licencia.estado || 'Desconocido',
+                badge: 'bg-gray-100 text-gray-600 border-gray-200'
+              };
 
               return (
                 <tr key={licencia.id} className="hover:bg-blue-50 transition-colors duration-150">
@@ -98,7 +108,7 @@ export const LicenciasTable: React.FC<LicenciasTableProps> = ({
                       <User className="w-4 h-4 text-blue-500 mt-0.5" />
                       <div>
                         <p className="text-sm font-medium text-gray-900">{licencia.usuario_nombre || 'No asignado'}</p>
-                        <p className="text-xs text-gray-500">{licencia.area_nombre}</p>
+                        <p className="text-xs text-gray-500">{licencia.area_nombre || 'Sin área'}</p>
                       </div>
                     </div>
                   </td>
@@ -118,7 +128,7 @@ export const LicenciasTable: React.FC<LicenciasTableProps> = ({
                     </div>
                   </td>
 
-                  {/* ESTADO */}
+                  {/* ESTADO CORREGIDO */}
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusConfig.badge}`}>
                       {statusConfig.label}
@@ -138,14 +148,23 @@ export const LicenciasTable: React.FC<LicenciasTableProps> = ({
                   {/* ACCIONES */}
                   <td className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      <button onClick={() => onView(licencia)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                      <button 
+                        onClick={() => onView(licencia)} 
+                        title="Ver detalles"
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button onClick={() => onDownload(licencia)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors">
+                      <button 
+                        onClick={() => onDownload(licencia)} 
+                        title="Descargar"
+                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      >
                         <Download className="w-4 h-4" />
                       </button>
                       <button 
                         onClick={() => onDelete(licencia.id)} 
+                        title="Eliminar"
                         className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
