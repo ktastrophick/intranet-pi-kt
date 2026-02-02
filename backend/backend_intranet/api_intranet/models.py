@@ -627,7 +627,7 @@ class Solicitud(models.Model):
 class LicenciaMedica(models.Model):
     """
     Registro de licencias médicas de funcionarios.
-    Rediseñado para privacidad (sin diagnóstico) y flujo de aprobación.
+    Rediseñado para privacidad (sin diagnóstico) y flujo de gestión profesional.
     """
     ESTADO_CHOICES = [
         ('pendiente', 'Pendiente de Revisión'),
@@ -637,42 +637,39 @@ class LicenciaMedica(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
-    # El folio es necesario para trámites administrativos, pero no revela la enfermedad
+    # Identificación de la licencia
     numero_licencia = models.CharField(
         max_length=50, 
         unique=True, 
         verbose_name="Número de Folio"
     )
 
-    # El usuario ahora puede subir su propia licencia
+    # El usuario que solicita/sube su licencia
     usuario = models.ForeignKey(
         'Usuario', 
         on_delete=models.CASCADE, 
         related_name='licencias'
     )
 
-    # Fechas de la licencia
+    # Fechas y cálculo de tiempo
     fecha_inicio = models.DateField()
     fecha_termino = models.DateField()
-    
-    # Campo calculado: se puede llenar automáticamente en el método save()
     dias_totales = models.IntegerField(editable=False)
 
-    # Cambiamos ImageField por FileField para que acepten PDF, DOCX o Imágenes
-    # Si configuras S3 en settings.py, Django lo enviará allá automáticamente
+    # Documentación adjunta
     documento_licencia = models.FileField(
         upload_to='licencias/%Y/%m/', 
         help_text='Cargue el documento o foto de su licencia (PDF, JPG, PNG)'
     )
 
-    # Estado de la solicitud
+    # Control de Estado
     estado = models.CharField(
         max_length=20, 
         choices=ESTADO_CHOICES, 
         default='pendiente'
     )
 
-    # Auditoría y Revisión (quien aprueba/rechaza, usualmente Subdirección/RRHH)
+    # Auditoría de Revisión (Siguiendo el estilo de Solicitud)
     revisada_por = models.ForeignKey(
         'Usuario',
         on_delete=models.SET_NULL,
@@ -687,7 +684,7 @@ class LicenciaMedica(models.Model):
     fecha_revision = models.DateTimeField(null=True, blank=True)
 
     # Metadata automática
-    creado_en = models.DateTimeField(auto_now_add=True) # Fecha de registro
+    creado_en = models.DateTimeField(auto_now_add=True)
     actualizada_en = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -697,6 +694,7 @@ class LicenciaMedica(models.Model):
         indexes = [
             models.Index(fields=['usuario', 'estado']),
             models.Index(fields=['fecha_inicio', 'fecha_termino']),
+            models.Index(fields=['revisada_por']), # Nuevo índice para optimizar filtros de subdirectora
         ]
 
     def __str__(self):
@@ -706,15 +704,47 @@ class LicenciaMedica(models.Model):
         """Calcula automáticamente los días totales antes de guardar"""
         if self.fecha_inicio and self.fecha_termino:
             delta = self.fecha_termino - self.fecha_inicio
-            # Se suma 1 porque si es del 1 al 1, es 1 día.
             self.dias_totales = delta.days + 1
         super().save(*args, **kwargs)
+
+    # --- MÉTODOS DE ACCIÓN (Lógica de Negocio centralizada) ---
+
+    def aprobar(self, revisor, comentarios=''):
+        """Aprueba la licencia y registra al auditor"""
+        self.estado = 'aprobada'
+        self.revisada_por = revisor
+        self.fecha_revision = timezone.now()
+        self.comentarios_revision = comentarios
+        self.save()
+
+    def rechazar(self, revisor, comentarios):
+        """Rechaza la licencia. Los comentarios son obligatorios para transparencia"""
+        if not comentarios:
+            raise ValueError("Debe proporcionar un motivo para el rechazo.")
+        self.estado = 'rechazada'
+        self.revisada_por = revisor
+        self.fecha_revision = timezone.now()
+        self.comentarios_revision = comentarios
+        self.save()
+
+    # --- PROPIEDADES PARA EL FRONTEND ---
 
     @property
     def esta_vigente(self):
         """Verifica si la licencia está transcurriendo hoy"""
         hoy = timezone.now().date()
         return self.fecha_inicio <= hoy <= self.fecha_termino
+
+    @property
+    def dias_restantes(self):
+        """Si está vigente, indica cuántos días quedan"""
+        hoy = timezone.now().date()
+        if self.esta_vigente:
+            delta = self.fecha_termino - hoy
+            return delta.days
+        return 0
+
+
 # ======================================================
 # 5. GESTIÓN DE DOCUMENTOS Y ARCHIVOS
 # ======================================================

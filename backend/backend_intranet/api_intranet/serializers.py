@@ -373,16 +373,24 @@ class SolicitudAprobacionSerializer(serializers.Serializer):
 class LicenciaMedicaSerializer(serializers.ModelSerializer):
     """Serializer actualizado para licencias médicas (Enfoque en Privacidad y Flujo)"""
     
-    # Campos de solo lectura para mostrar información amigable en el frontend
+    # Campos de solo lectura para información amigable
     usuario_nombre = serializers.CharField(source='usuario.get_nombre_completo', read_only=True)
+    usuario_rut = serializers.CharField(source='usuario.rut', read_only=True) # Útil para que la subdirectora identifique rápido
     area_nombre = serializers.CharField(source='usuario.area.nombre', read_only=True)
-    revisada_por_nombre = serializers.CharField(source='revisada_por.get_nombre_completo', read_only=True, default=None)
     
-    # Muestra el texto legible del estado (ej: "Pendiente de Revisión" en lugar de "pendiente")
+    # Información del revisor
+    revisada_por_nombre = serializers.CharField(
+        source='revisada_por.get_nombre_completo', 
+        read_only=True, 
+        default="No revisada"
+    )
+    
+    # Texto legible del estado
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
     
-    # Como en el modelo usamos @property para esta_vigente, se puede declarar así:
+    # Nuevas propiedades del modelo
     esta_vigente = serializers.BooleanField(read_only=True)
+    dias_restantes = serializers.IntegerField(read_only=True) # Agregado para el frontend
 
     class Meta:
         model = LicenciaMedica
@@ -391,7 +399,8 @@ class LicenciaMedicaSerializer(serializers.ModelSerializer):
             'numero_licencia', 
             'usuario', 
             'usuario_nombre', 
-            'area_nombre',
+            'usuario_rut', # Agregado
+            'area_nombre', 
             'fecha_inicio', 
             'fecha_termino', 
             'dias_totales', 
@@ -404,12 +413,14 @@ class LicenciaMedicaSerializer(serializers.ModelSerializer):
             'fecha_revision', 
             'creado_en', 
             'actualizada_en',
-            'esta_vigente'
+            'esta_vigente',
+            'dias_restantes' # Agregado
         ]
         
-        # Campos que el usuario NO puede manipular al subir su licencia
+        # Ajustamos los campos de solo lectura
         read_only_fields = (
             'id', 
+            'usuario', # El usuario se asigna automáticamente en el ViewSet
             'dias_totales', 
             'estado', 
             'revisada_por', 
@@ -419,11 +430,17 @@ class LicenciaMedicaSerializer(serializers.ModelSerializer):
         )
 
     def validate(self, data):
-        """Validaciones de lógica de fechas"""
+        """Validaciones de integridad de datos"""
+        # 1. Validación de fechas (ya la tenías)
         if data['fecha_inicio'] > data['fecha_termino']:
             raise serializers.ValidationError({
                 "fecha_termino": "La fecha de término no puede ser anterior a la de inicio."
             })
+            
+        # 2. Validación opcional: No permitir licencias con fecha de inicio 
+        # excesivamente en el pasado o futuro (opcional, según reglas del CESFAM)
+        # return data
+        
         return data
 
 

@@ -357,17 +357,15 @@ class SolicitudViewSet(viewsets.ModelViewSet):
 # LICENCIA MÉDICA VIEWSET
 # ======================================================
 
+# Ubicación: api_intranet/views.py
+
 class LicenciaMedicaViewSet(viewsets.ModelViewSet):
     """
-    ViewSet actualizado: 
-    - Los usuarios suben sus propias licencias.
-    - Privacidad: se eliminó el filtro por 'tipo'.
-    - Flujo: Aprobación por niveles 3 y 4.
+    ViewSet para la gestión de licencias médicas.
+    Implementa lógica de bandejas para Subdirección y flujo de aprobación robusto.
     """
     serializer_class = LicenciaMedicaSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    
-    # Filtros: quitamos 'tipo' y agregamos 'estado'
     filterset_fields = ['estado', 'usuario__area']
     search_fields = ['numero_licencia', 'usuario__nombre', 'usuario__rut']
     ordering_fields = ['fecha_inicio', 'creado_en']
@@ -375,76 +373,99 @@ class LicenciaMedicaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        # Optimizamos la consulta con select_related
+        qs = LicenciaMedica.objects.select_related('usuario', 'usuario__area', 'revisada_por')
         
-        # 1. Dirección y Subdirección (Nivel 3 y 4): Ven TODO
-        if user.rol.nivel >= 3:
-            return LicenciaMedica.objects.select_related('usuario', 'revisada_por').all()
-        
-        # 2. Jefatura (Nivel 2): Ve las de su área para gestión interna
-        elif user.rol.nivel == 2:
-            return LicenciaMedica.objects.filter(usuario__area=user.area).select_related('usuario')
-        
-        # 3. Funcionario (Nivel 1): Solo ve las SUYAS
-        return LicenciaMedica.objects.filter(usuario=user)
+        if user.rol.nivel >= 3: # Dirección y Subdirección
+            return qs.all()
+        elif user.rol.nivel == 2: # Jefatura
+            return qs.filter(usuario__area=user.area)
+        else: # Funcionario
+            return qs.filter(usuario=user)
 
     def perform_create(self, serializer):
-        """
-        Al crear una licencia, el sistema asigna automáticamente:
-        - El usuario: quien está logueado.
-        - El estado: 'pendiente' (por defecto en el modelo).
-        """
+        """Al subir una licencia, se asigna automáticamente el usuario actual"""
         serializer.save(usuario=self.request.user)
+
+    # --- ACCIÓN DE GESTIÓN (APROBAR/RECHAZAR) ---
 
     @action(detail=True, methods=['post'], url_path='gestionar-licencia')
     def gestionar(self, request, pk=None):
         """
-        Acción especial para que Subdirección/Dirección apruebe o rechace.
-        POST /api/licencias/{id}/gestionar-licencia/
-        Payload: {"nuevo_estado": "aprobada", "comentarios": "..."}
+        Acción para que Subdirección gestione la licencia.
+        Usa los nuevos métodos del modelo para asegurar la auditoría.
         """
         licencia = self.get_object()
         user = request.user
 
-        # Seguridad: Solo niveles >= 3 pueden gestionar
         if user.rol.nivel < 3:
-            return Response(
-                {"error": "No tiene permisos para aprobar o rechazar licencias."},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            return Response({"error": "No tiene permisos para gestionar licencias."}, status=403)
 
         nuevo_estado = request.data.get('nuevo_estado')
         comentarios = request.data.get('comentarios', '')
 
-        if nuevo_estado not in ['aprobada', 'rechazada']:
-            return Response(
-                {"error": "Estado no válido. Use 'aprobada' o 'rechazada'."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        try:
+            if nuevo_estado == 'aprobada':
+                licencia.aprobar(revisor=user, comentarios=comentarios)
+            elif nuevo_estado == 'rechazada':
+                licencia.rechazar(revisor=user, comentarios=comentarios)
+            else:
+                return Response({"error": "Estado no válido. Use 'aprobada' o 'rechazada'."}, status=400)
+            
+            return Response({
+                "status": f"Licencia {nuevo_estado} correctamente",
+                "revisor": user.get_nombre_completo()
+            })
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
 
-        # Actualizamos la licencia con los datos del revisor
-        licencia.estado = nuevo_estado
-        licencia.revisada_por = user
-        licencia.comentarios_revision = comentarios
-        licencia.fecha_revision = timezone.now()
-        licencia.save()
+    # --- BANDEJAS DE ENTRADA (Filtros para LicenciasAdminPage) ---
 
-        return Response({
-            "status": f"Licencia {nuevo_estado} correctamente",
-            "revisor": user.get_nombre_completo()
-        })
+    @action(detail=False, methods=['get'])
+    def pendientes(self, request):
+        """Muestra solo lo que está esperando revisión"""
+        if request.user.rol.nivel < 3:
+            return Response({"error": "No autorizado"}, status=403)
+        
+        licencias = self.get_queryset().filter(estado='pendiente')
+        serializer = self.get_serializer(licencias, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def mis_revisiones(self, request):
+        """Muestra las licencias que YO he gestionado (incluye las mías de cualquier estado)"""
+        if request.user.rol.nivel < 3:
+            return Response({"error": "No autorizado"}, status=403)
+            
+        # Filtramos por el revisor actual
+        licencias = self.get_queryset().filter(revisada_por=request.user)
+        serializer = self.get_serializer(licencias, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def historial_completo(self, request):
+        """Muestra todas las licencias que ya fueron procesadas por cualquier administrador"""
+        if request.user.rol.nivel < 3:
+            return Response({"error": "No autorizado"}, status=403)
+        
+        # Todo lo que NO sea pendiente es historial
+        licencias = self.get_queryset().exclude(estado='pendiente')
+        serializer = self.get_serializer(licencias, many=True)
+        return Response(serializer.data)
+
+    # --- VISTAS PARA EL FUNCIONARIO ---
 
     @action(detail=False, methods=['get'])
     def mis_licencias(self, request):
-        """Atajo para que el usuario vea solo su historial"""
+        """Historial personal del funcionario logueado"""
         licencias = LicenciaMedica.objects.filter(usuario=request.user)
         serializer = self.get_serializer(licencias, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def vigentes(self, request):
-        """Listar solo licencias aprobadas que están transcurriendo hoy"""
+        """Licencias que están transcurriendo hoy (útil para dashboards)"""
         hoy = timezone.now().date()
-        # Solo mostramos como "vigentes" las que ya fueron aprobadas
         licencias = self.get_queryset().filter(
             estado='aprobada',
             fecha_inicio__lte=hoy,
