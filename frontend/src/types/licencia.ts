@@ -20,6 +20,7 @@ export interface LicenciaMedica {
   creado_en: string;
   actualizada_en: string;
   esta_vigente: boolean;
+  dias_restantes: number;
 }
 
 export const ALLOWED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];

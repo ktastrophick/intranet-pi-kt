@@ -37,6 +37,7 @@ const formatFileSize = (bytes: number) => {
 // ======================================================
 
 export interface LicenciaFormData {
+  numero_licencia: string;
   fechaInicio: string;
   fechaTermino: string;
   archivo: File | null;
@@ -55,6 +56,7 @@ export const LicenciaUploadModal: React.FC<LicenciaUploadModalProps> = ({
   onSubmit
 }) => {
   const [formData, setFormData] = useState<LicenciaFormData>({
+    numero_licencia: '',
     fechaInicio: '',
     fechaTermino: '',
     archivo: null
@@ -121,7 +123,7 @@ export const LicenciaUploadModal: React.FC<LicenciaUploadModalProps> = ({
   };
 
   const handleClose = () => {
-    setFormData({ fechaInicio: '', fechaTermino: '', archivo: null });
+    setFormData({ numero_licencia: '',fechaInicio: '', fechaTermino: '', archivo: null });
     setErrors({});
     onClose();
   };
@@ -141,6 +143,21 @@ export const LicenciaUploadModal: React.FC<LicenciaUploadModalProps> = ({
 
         <div className="space-y-4 py-4">
           <div className="grid grid-cols-2 gap-4">
+
+
+            <div className="space-y-2">
+              <Label>Número de Folio / Licencia</Label>
+              <Input 
+                placeholder="Ej: 1-12345678"
+                value={formData.numero_licencia}
+                onChange={(e) => setFormData({...formData, numero_licencia: e.target.value})}
+                className={errors.numero_licencia ? 'border-red-500' : ''}
+              />
+              {errors.numero_licencia && <p className="text-[10px] text-red-500">{errors.numero_licencia}</p>}
+            </div>
+
+
+
             <div className="space-y-2">
               <Label>Fecha Inicio</Label>
               <Input 

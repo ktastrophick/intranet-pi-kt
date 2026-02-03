@@ -1,76 +1,77 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react'; // Eliminamos 'React' si no se usa
 import api from '@/api/axios';
 import { toast } from 'sonner';
 import { 
   Loader2, CheckCircle, XCircle, Eye, 
   ClipboardCheck, Clock, History, UserCheck, 
-  FileText, Search, Filter
-} from 'lucide-react';
+  FileText, Search
+} from 'lucide-react'; // Eliminamos 'Filter' que no se usaba
 import { UnifiedNavbar } from '@/components/common/layout/UnifiedNavbar';
 import Footer from '@/components/common/layout/Footer';
 import BannerLicencias from '@/components/images/banners_finales/BannerLicencias';
-import { useAuth } from '@/api/contexts/AuthContext';
 
 type TabType = 'pendientes' | 'mis-gestiones' | 'historial-global';
 
 export const LicenciasAdminPage = () => {
-  const { user } = useAuth(); // Obtenemos el usuario logueado
   const [activeTab, setActiveTab] = useState<TabType>('pendientes');
   const [licencias, setLicencias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedLicencia, setSelectedLicencia] = useState<any>(null);
   const [comentarios, setComentarios] = useState('');
 
-  // Cargar datos según la pestaña activa
+  // 1. FUNCIÓN DE CARGA
   const fetchLicencias = async () => {
     try {
       setLoading(true);
       let url = '/licencias/';
       
       if (activeTab === 'pendientes') {
-        url += '?estado=pendiente';
+        url += 'pendientes/';
       } else if (activeTab === 'mis-gestiones') {
-        // Asumiendo que el backend permite filtrar por el administrador que gestionó
-        url += `?gestionado_por=${user?.id}`;
+        url += 'mis_revisiones/';
       } else if (activeTab === 'historial-global') {
-        // Traer todas las que NO están pendientes
-        url += '?excluir_estado=pendiente';
+        url += 'historial_completo/';
       }
 
       const response = await api.get(url);
       setLicencias(response.data);
     } catch (error) {
+      console.error(error);
       toast.error("Error al cargar la información");
     } finally {
       setLoading(false);
     }
   };
 
+  // 2. EL EFECTO (Faltaba esto, por eso se quedaba cargando)
   useEffect(() => {
     fetchLicencias();
   }, [activeTab]);
 
+  // 3. GESTIÓN
   const handleGestionar = async (id: string, nuevoEstado: 'aprobada' | 'rechazada') => {
-    if (nuevoEstado === 'rechazada' && !comentarios) {
-      toast.error("Debes agregar un comentario para rechazar");
+    if (nuevoEstado === 'rechazada' && !comentarios.trim()) {
+      toast.error("Por favor, indique el motivo del rechazo.");
       return;
     }
 
     try {
+      // Quitamos 'const response =' porque no usabas la variable
       await api.post(`/licencias/${id}/gestionar-licencia/`, {
         nuevo_estado: nuevoEstado,
         comentarios: comentarios
       });
+      
       toast.success(`Licencia ${nuevoEstado} exitosamente`);
       setLicencias(licencias.filter((l: any) => l.id !== id));
       setSelectedLicencia(null);
       setComentarios('');
-    } catch (error) {
-      toast.error("Error al procesar la solicitud");
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || "Error al procesar la solicitud";
+      toast.error(errorMsg);
     }
   };
 
-  // Renderizado de Badge de estado para los historiales
   const StatusBadge = ({ estado }: { estado: string }) => {
     const styles: any = {
       aprobada: "bg-green-100 text-green-700 border-green-200",
@@ -78,7 +79,7 @@ export const LicenciasAdminPage = () => {
       pendiente: "bg-yellow-100 text-yellow-700 border-yellow-200",
     };
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-bold border ${styles[estado] || styles.pendiente}`}>
+      <span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${styles[estado] || styles.pendiente}`}>
         {estado.toUpperCase()}
       </span>
     );
@@ -93,7 +94,6 @@ export const LicenciasAdminPage = () => {
       <main className="flex-1 bg-gradient-to-br from-gray-50 via-blue-50 to-cyan-50 p-4 md:p-8">
         <div className="max-w-[1600px] mx-auto">
           
-          {/* Header Administrativo */}
           <div className="bg-white rounded-2xl shadow-md p-6 mb-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
@@ -101,7 +101,6 @@ export const LicenciasAdminPage = () => {
                 <p className="text-sm text-gray-600">Gestión y auditoría de documentos médicos</p>
               </div>
               
-              {/* Tabs de Navegación Interna */}
               <div className="flex bg-gray-100 p-1 rounded-xl w-fit">
                 {[
                   { id: 'pendientes', label: 'Pendientes', icon: Clock },
@@ -125,7 +124,6 @@ export const LicenciasAdminPage = () => {
             </div>
           </div>
 
-          {/* Tabla de Datos */}
           <div className="bg-white rounded-2xl shadow-md overflow-hidden border border-white">
             {loading ? (
               <div className="flex flex-col items-center py-20">
@@ -166,7 +164,8 @@ export const LicenciasAdminPage = () => {
                             <div className="flex flex-col gap-1">
                               <StatusBadge estado={l.estado} />
                               <span className="text-[10px] text-gray-400 italic">
-                                Por: {l.nombre_administrador || 'Sistema'}
+                                {/* CAMBIO: Usamos el nombre del serializer */}
+                                Por: {l.revisada_por_nombre || 'Sistema'}
                               </span>
                             </div>
                           </td>
@@ -176,7 +175,6 @@ export const LicenciasAdminPage = () => {
                             <button 
                               onClick={() => window.open(l.documento_licencia, '_blank')}
                               className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
-                              title="Ver PDF"
                             >
                               <Eye size={18} />
                             </button>
@@ -188,11 +186,10 @@ export const LicenciasAdminPage = () => {
                                 GESTIONAR
                               </button>
                             )}
-                            {activeTab !== 'pendientes' && l.comentarios && (
+                            {activeTab !== 'pendientes' && l.comentarios_revision && (
                                 <button 
-                                  onClick={() => toast.info(`Obs: ${l.comentarios}`)}
+                                  onClick={() => toast.info(`Obs: ${l.comentarios_revision}`)}
                                   className="p-2 text-gray-400 hover:text-gray-600"
-                                  title="Ver Observaciones"
                                 >
                                   <FileText size={18} />
                                 </button>
@@ -206,12 +203,10 @@ export const LicenciasAdminPage = () => {
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-24 text-center">
-                <div className="bg-gray-50 p-6 rounded-full mb-4 border border-gray-100 shadow-inner">
-                  <Search className="w-12 h-12 text-gray-300" />
-                </div>
+                <Search className="w-12 h-12 text-gray-300 mb-4" />
                 <h3 className="text-xl font-bold text-gray-800">No hay registros</h3>
-                <p className="text-gray-500 max-w-xs mx-auto text-sm">
-                  No se encontraron licencias en la categoría "{activeTab.replace('-', ' ')}".
+                <p className="text-gray-500 text-sm">
+                  No se encontraron licencias en la categoría "{activeTab}".
                 </p>
               </div>
             )}
@@ -219,10 +214,10 @@ export const LicenciasAdminPage = () => {
         </div>
       </main>
 
-      {/* Modal de Gestión (Se mantiene igual pero con estilo unificado) */}
+      {/* Modal de Gestión */}
       {selectedLicencia && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in duration-200 border border-white">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-white">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <div className="flex items-center gap-3">
                 <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
@@ -230,7 +225,7 @@ export const LicenciasAdminPage = () => {
                 </div>
                 <h2 className="text-lg font-bold text-gray-800">Procesar Solicitud</h2>
               </div>
-              <button onClick={() => setSelectedLicencia(null)} className="text-gray-400 hover:text-red-500 transition-colors">
+              <button onClick={() => setSelectedLicencia(null)} className="text-gray-400 hover:text-red-500">
                 <XCircle size={24} />
               </button>
             </div>
@@ -253,9 +248,9 @@ export const LicenciasAdminPage = () => {
                 Observaciones Administrativas
               </label>
               <textarea
-                className="w-full border border-gray-200 p-4 rounded-xl focus:ring-2 focus:ring-[#009DDC] focus:border-transparent outline-none transition-all resize-none bg-gray-50/30 text-sm"
+                className="w-full border border-gray-200 p-4 rounded-xl focus:ring-2 focus:ring-[#009DDC] outline-none transition-all resize-none bg-gray-50/30 text-sm"
                 rows={4}
-                placeholder="Indique los motivos de la decisión o comentarios adicionales..."
+                placeholder="Indique los motivos de la decisión..."
                 value={comentarios}
                 onChange={(e) => setComentarios(e.target.value)}
               />
@@ -269,7 +264,7 @@ export const LicenciasAdminPage = () => {
                 </button>
                 <button 
                   onClick={() => handleGestionar(selectedLicencia.id, 'aprobada')}
-                  className="flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-[#009DDC] to-[#4DFFF3] text-white rounded-xl font-bold hover:shadow-lg hover:shadow-blue-200 transition-all"
+                  className="flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-[#009DDC] to-[#4DFFF3] text-white rounded-xl font-bold transition-all"
                 >
                   <CheckCircle size={18}/> Aprobar
                 </button>

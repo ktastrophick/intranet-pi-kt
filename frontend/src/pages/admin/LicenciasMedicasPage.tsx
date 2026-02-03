@@ -44,20 +44,20 @@ export const LicenciasMedicasPage: React.FC = () => {
 
   // 3. ENVIAR LICENCIA REAL AL BACKEND
   const handleSubmitLicencia = async (data: LicenciaFormData) => {
-    if (!data.archivo) return;
+  if (!data.archivo) return;
 
-    // Para enviar archivos a Django necesitamos FormData
-    const formData = new FormData();
-    formData.append('numero_licencia', (data as any).numero_licencia);
-    formData.append('fecha_inicio', data.fechaInicio);
-    formData.append('fecha_termino', data.fechaTermino);
-    formData.append('documento_licencia', data.archivo); // El archivo real
-    formData.append('usuario', user?.id || ''); // ID del funcionario
+  const formData = new FormData();
+  formData.append('numero_licencia', data.numero_licencia); // Usamos el campo del modal
+  formData.append('fecha_inicio', data.fechaInicio);
+  formData.append('fecha_termino', data.fechaTermino);
+  formData.append('documento_licencia', data.archivo);
+  
+  // NO ENVIAR 'usuario', el backend lo toma del request.user (Token)
 
-    try {
-      const response = await api.post('/licencias/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+  try {
+    const response = await api.post('/licencias/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
       
       // Si el backend responde OK, agregamos la respuesta real al estado
       setLicencias([response.data, ...licencias]);
