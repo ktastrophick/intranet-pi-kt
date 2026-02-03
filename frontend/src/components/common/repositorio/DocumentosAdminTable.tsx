@@ -45,25 +45,44 @@ export function DocumentosAdminTable() {
       setLoading(true)
       setError(null)
       const response = await documentosService.getAll()
-      console.log('Respuesta de la API:', response) // Debug
       
-      // Manejar diferentes formatos de respuesta
       if (response && response.results) {
         setDocumentos(response.results)
       } else if (Array.isArray(response)) {
         setDocumentos(response)
       } else {
-        console.warn('Formato de respuesta inesperado:', response)
         setDocumentos([])
       }
     } catch (err) {
       console.error('Error al cargar documentos:', err)
       setError('Error al cargar los documentos')
-      setDocumentos([]) // Asegurar que sea array vacío
+      setDocumentos([])
     } finally {
       setLoading(false)
     }
   }
+
+  // --- NUEVA FUNCIÓN PARA VISUALIZAR CON TOKEN ---
+  const handleVisualizar = async (id: string, mimeType: string) => {
+    try {
+      // Usamos el servicio que ya maneja el token y devuelve un Blob
+      const blob = await documentosService.download(id);
+      
+      // Creamos una URL temporal para el blob
+      // Forzamos el tipo de contenido si es necesario para que el navegador sepa abrirlo
+      const file = new Blob([blob], { type: mimeType || 'application/pdf' });
+      const fileURL = URL.createObjectURL(file);
+      
+      // Abrimos en una pestaña nueva
+      window.open(fileURL, '_blank');
+      
+      // Opcional: limpiar la URL después de un tiempo
+      setTimeout(() => URL.revokeObjectURL(fileURL), 1000);
+    } catch (error) {
+      console.error('Error al visualizar el documento:', error);
+      alert('No se pudo cargar la previsualización del documento.');
+    }
+  };
 
   const handleEliminar = async (id: string) => {
     if (!confirm('¿Estás seguro de que deseas eliminar este documento?')) {
@@ -127,7 +146,6 @@ export function DocumentosAdminTable() {
 
   return (
     <div className="space-y-4">
-      {/* Header con búsqueda y botón subir */}
       <div className="flex justify-between items-center">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -146,7 +164,6 @@ export function DocumentosAdminTable() {
         )}
       </div>
 
-      {/* Tabla */}
       <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
@@ -200,21 +217,26 @@ export function DocumentosAdminTable() {
                     {doc.descargas}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex gap-2 justify-end">
+                    <div className="flex gap-2 justify-end items-center">
+                      {/* Botón de Visualizar corregido */}
                       <Button
                         variant="ghost"
                         size="sm"
                         title="Visualizar"
-                        onClick={() => window.open(`http://127.0.0.1:8000/api/documentos/${doc.id}/download/`, '_blank')}
+                        onClick={() => handleVisualizar(doc.id, doc.mime_type)}
                       >
                         <Eye className="w-4 h-4" />
                       </Button>
+
+                      {/* Botón de Descarga (Tu componente existente) */}
                       <FileDownload
                         documentId={doc.id}
                         fileName={doc.nombre_archivo}
                         fileType={doc.mime_type}
                         iconClassName="w-4 h-4 text-blue-600 cursor-pointer hover:text-blue-800"
                       />
+
+                      {/* Botón de Eliminar */}
                       {puedeGestionar && (
                         <Button
                           variant="ghost"
@@ -234,7 +256,6 @@ export function DocumentosAdminTable() {
         </Table>
       </div>
 
-      {/* Diálogo para subir */}
       <SubirDocumentoUltraSimple
         open={dialogOpen}
         onOpenChange={setDialogOpen}
