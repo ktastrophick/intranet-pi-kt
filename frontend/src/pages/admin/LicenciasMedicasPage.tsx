@@ -4,31 +4,33 @@ import React, { useState, useEffect } from 'react';
 import { FileUploader } from '@/components/common/licencias/FileUploader';
 import { LicenciasTable } from '@/components/common/licencias/LicenciasTable';
 import { LicenciaUploadModal, type LicenciaFormData } from '@/components/common/licencias/LicenciaUploadModal';
+// IMPORTAMOS EL NUEVO MODAL DE DETALLES
+import { LicenciaDetailsModal } from '@/components/common/licencias/LicenciaDetailsModal';
 import type { LicenciaMedica } from '@/types/licencia';
 import { FileText, Loader2 } from 'lucide-react';
 import { UnifiedNavbar } from '@/components/common/layout/UnifiedNavbar';
 import Footer from '@/components/common/layout/Footer';
 import { useAuth } from '@/api/contexts/AuthContext';
 import BannerLicencias from '@/components/images/banners_finales/BannerLicencias';
-
-// --- IMPORTANTE: Aquí debes importar tu instancia de API (axios) ---
 import api from '@/api/axios'; 
-import { toast } from 'sonner'; // O la librería de alertas que uses
+import { toast } from 'sonner';
 
 export const LicenciasMedicasPage: React.FC = () => {
   const { user } = useAuth();
   
-  // 1. Iniciamos con la lista vacía (sin mock)
   const [licencias, setLicencias] = useState<LicenciaMedica[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [loading, setLoading] = useState(true); // Estado de carga
+  const [loading, setLoading] = useState(true);
+  
+  // ESTADOS PARA MODALES
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [selectedLicencia, setSelectedLicencia] = useState<LicenciaMedica | null>(null);
 
-  // 2. EFECTO PARA CARGAR DATOS REALES DEL BACKEND
+  // 1. CARGA DE DATOS
   useEffect(() => {
     const cargarLicencias = async () => {
       try {
         setLoading(true);
-        // Ajusta la URL según tu backend de Django
         const response = await api.get('/licencias/'); 
         setLicencias(response.data);
       } catch (error) {
@@ -42,26 +44,23 @@ export const LicenciasMedicasPage: React.FC = () => {
     cargarLicencias();
   }, []);
 
-  // 3. ENVIAR LICENCIA REAL AL BACKEND
+  // 2. SUBIDA DE LICENCIA
   const handleSubmitLicencia = async (data: LicenciaFormData) => {
-  if (!data.archivo) return;
+    if (!data.archivo) return;
 
-  const formData = new FormData();
-  formData.append('numero_licencia', data.numero_licencia); // Usamos el campo del modal
-  formData.append('fecha_inicio', data.fechaInicio);
-  formData.append('fecha_termino', data.fechaTermino);
-  formData.append('documento_licencia', data.archivo);
-  
-  // NO ENVIAR 'usuario', el backend lo toma del request.user (Token)
+    const formData = new FormData();
+    formData.append('numero_licencia', data.numero_licencia);
+    formData.append('fecha_inicio', data.fechaInicio);
+    formData.append('fecha_termino', data.fechaTermino);
+    formData.append('documento_licencia', data.archivo);
 
-  try {
-    const response = await api.post('/licencias/', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
+    try {
+      const response = await api.post('/licencias/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       
-      // Si el backend responde OK, agregamos la respuesta real al estado
       setLicencias([response.data, ...licencias]);
-      setIsModalOpen(false);
+      setIsUploadModalOpen(false);
       toast.success("Licencia cargada exitosamente");
     } catch (error) {
       console.error("Error al subir licencia:", error);
@@ -69,7 +68,7 @@ export const LicenciasMedicasPage: React.FC = () => {
     }
   };
 
-  // 4. ELIMINAR REAL
+  // 3. ELIMINACIÓN
   const handleDelete = async (id: string) => {
     if (!confirm("¿Eliminar esta licencia permanentemente?")) return;
     try {
@@ -81,7 +80,12 @@ export const LicenciasMedicasPage: React.FC = () => {
     }
   };
 
-  const handleView = (licencia: LicenciaMedica) => window.open(licencia.documento_licencia, '_blank');
+  // 4. MANEJO DE VISTA DE DETALLES (Abre el Modal)
+  const handleViewDetails = (licencia: LicenciaMedica) => {
+    setSelectedLicencia(licencia);
+    setIsDetailsModalOpen(true);
+  };
+
   const handleDownload = (licencia: LicenciaMedica) => {
      const link = document.createElement('a');
      link.href = licencia.documento_licencia;
@@ -89,10 +93,7 @@ export const LicenciasMedicasPage: React.FC = () => {
      link.click();
   };
 
-  const handleOpenModal = () => setIsModalOpen(true);
-  const handleCloseModal = () => setIsModalOpen(false);
-
-  // ESTADÍSTICAS (se calculan sobre los datos reales que llegan del backend)
+  // ESTADÍSTICAS
   const stats = {
     total: licencias.length,
     aprobadas: licencias.filter(l => l.estado === 'aprobada').length,
@@ -112,61 +113,67 @@ export const LicenciasMedicasPage: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-md p-6 mb-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-xl font-bold">Gestión de Licencias</h1>
-                <p className="text-sm text-gray-600">Repositorio digital administrativo</p>
+                <h1 className="text-xl font-bold text-gray-800">Mis Licencias Médicas</h1>
+                <p className="text-sm text-gray-600">Gestión de documentos personales y seguimiento</p>
               </div>
-              <div className="bg-gradient-to-r from-[#009DDC] to-[#4DFFF3] text-white px-4 py-2 rounded-lg">
-                <p className="text-xs font-semibold">🔒 Acceso Administrativo</p>
+              <div className="bg-gradient-to-r from-[#009DDC] to-[#4DFFF3] text-white px-4 py-2 rounded-lg shadow-sm">
+                <p className="text-xs font-semibold">👤 Funcionario: {user?.nombre}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Stat Total */}
               <div className="bg-blue-50 p-4 rounded-xl border-l-4 border-blue-500">
-                <p className="text-sm text-gray-600">Total</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
+                <p className="text-xs text-blue-600 font-bold uppercase tracking-wider">Historial Total</p>
+                <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
               </div>
-              {/* Stat Aprobadas */}
               <div className="bg-green-50 p-4 rounded-xl border-l-4 border-green-500">
-                <p className="text-sm text-gray-600">Aprobadas</p>
-                <p className="text-2xl font-bold">{stats.aprobadas}</p>
+                <p className="text-xs text-green-600 font-bold uppercase tracking-wider">Validadas</p>
+                <p className="text-2xl font-bold text-gray-800">{stats.aprobadas}</p>
               </div>
-              {/* Stat Pendientes */}
               <div className="bg-yellow-50 p-4 rounded-xl border-l-4 border-yellow-500">
-                <p className="text-sm text-gray-600">Pendientes</p>
-                <p className="text-2xl font-bold">{stats.pendientes}</p>
+                <p className="text-xs text-yellow-600 font-bold uppercase tracking-wider">En Revisión</p>
+                <p className="text-2xl font-bold text-gray-800">{stats.pendientes}</p>
               </div>
             </div>
           </div>
 
-          <FileUploader onOpenModal={handleOpenModal} />
+          {/* Subidor de archivos */}
+          <FileUploader onOpenModal={() => setIsUploadModalOpen(true)} />
 
+          {/* Modal para subir nueva licencia */}
           <LicenciaUploadModal
-            isOpen={isModalOpen}
-            onClose={handleCloseModal}
+            isOpen={isUploadModalOpen}
+            onClose={() => setIsUploadModalOpen(false)}
             onSubmit={handleSubmitLicencia}
           />
 
-          {/* Si está cargando, mostramos un spinner */}
+          {/* NUEVO: Modal para ver detalles completos de una licencia */}
+          <LicenciaDetailsModal
+            isOpen={isDetailsModalOpen}
+            onClose={() => setIsDetailsModalOpen(false)}
+            licencia={selectedLicencia}
+          />
+
+          {/* Cuerpo de la tabla */}
           {loading ? (
             <div className="flex flex-col items-center py-20">
-              <Loader2 className="w-10 h-10 animate-spin text-blue-500 mb-4" />
-              <p className="text-gray-500">Conectando con el servidor...</p>
+              <Loader2 className="w-10 h-10 animate-spin text-[#009DDC] mb-4" />
+              <p className="text-gray-500 font-medium tracking-tight">Cargando registros...</p>
             </div>
           ) : (
             <>
               <LicenciasTable
                 licencias={licencias}
-                onView={handleView}
+                onView={handleViewDetails} // Ahora abre el modal de detalles
                 onDownload={handleDownload}
                 onDelete={handleDelete}
               />
 
               {licencias.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-16">
-                  <FileText className="w-16 h-16 text-gray-400 mb-4" />
-                  <h3 className="text-xl font-bold text-gray-800">No hay datos en la base de datos</h3>
-                  <p className="text-gray-500">Sube el primer archivo para comenzar.</p>
+                <div className="flex flex-col items-center justify-center py-20 bg-white/50 rounded-3xl border border-dashed border-gray-300 mt-6">
+                  <FileText className="w-12 h-12 text-gray-300 mb-3" />
+                  <h3 className="text-lg font-bold text-gray-700">Aún no tienes licencias registradas</h3>
+                  <p className="text-gray-500 text-sm">Usa el botón superior para subir tu primer documento.</p>
                 </div>
               )}
             </>

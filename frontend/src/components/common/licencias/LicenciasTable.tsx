@@ -2,9 +2,19 @@
 
 import React from 'react';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import type { LicenciaMedica, EstadoLicencia } from '@/types/licencia';
 import { FILE_TYPE_CONFIG, STATUS_CONFIG, getFileExtension } from '@/types/licencia';
-import { Eye, Download, Trash2, Calendar, User, MessageSquare, ShieldCheck } from 'lucide-react';
+import { 
+  Eye, 
+  Download, 
+  Trash2, 
+  Calendar, 
+  User, 
+  MessageSquare, 
+  ShieldCheck,
+  Clock
+} from 'lucide-react';
 
 interface LicenciasTableProps {
   licencias: LicenciaMedica[];
@@ -44,7 +54,7 @@ export const LicenciasTable: React.FC<LicenciasTableProps> = ({
 }) => {
   if (licencias.length === 0) return (
     <div className="text-center p-10 bg-gray-50 rounded-xl border-2 border-dashed">
-      <p className="text-gray-500">No hay licencias registradas aún.</p>
+      <p className="text-gray-500 font-medium">No hay licencias registradas aún.</p>
     </div>
   );
 
@@ -64,9 +74,10 @@ export const LicenciasTable: React.FC<LicenciasTableProps> = ({
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Folio / Archivo</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Funcionario</th>
               <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Período</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Estado y Observaciones</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Estado</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Observaciones</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Validado Por</th>
               <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Fecha Carga</th>
               <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Acciones</th>
             </tr>
@@ -83,29 +94,18 @@ export const LicenciasTable: React.FC<LicenciasTableProps> = ({
               };
 
               return (
-                <tr key={licencia.id} className="hover:bg-blue-50/50 transition-colors duration-150">
+                <tr key={licencia.id} className="hover:bg-blue-50/40 transition-colors duration-150 group">
                   {/* ARCHIVO */}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg ${fileConfig.bgColor} flex items-center justify-center shadow-sm`}>
-                        <span className="text-xl">{fileConfig.icon}</span>
+                      <div className={`w-9 h-9 rounded-lg ${fileConfig.bgColor} flex items-center justify-center shadow-sm`}>
+                        <span className="text-lg">{fileConfig.icon}</span>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-bold text-gray-900 truncate max-w-[150px]">
-                          Folio: {licencia.numero_licencia}
+                        <p className="text-sm font-bold text-gray-900 truncate max-w-[120px]">
+                          {licencia.numero_licencia}
                         </p>
                         <p className="text-[10px] text-gray-400 font-mono uppercase tracking-widest">{ext}</p>
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* FUNCIONARIO */}
-                  <td className="px-6 py-4">
-                    <div className="flex items-start gap-2">
-                      <User className="w-4 h-4 text-blue-500 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{licencia.usuario_nombre || 'No asignado'}</p>
-                        <p className="text-xs text-gray-500">{licencia.area_nombre || 'Sin área'}</p>
                       </div>
                     </div>
                   </td>
@@ -113,80 +113,85 @@ export const LicenciasTable: React.FC<LicenciasTableProps> = ({
                   {/* PERIODO */}
                   <td className="px-6 py-4">
                     <div className="flex items-start gap-2">
-                      <Calendar className="w-4 h-4 text-emerald-500 mt-0.5" />
                       <div className="text-xs text-gray-600">
                         <span className="font-bold text-gray-900">{licencia.dias_totales} días</span>
-                        <div className="flex flex-col text-gray-500 mt-0.5">
-                          <span>Desde: {formatDateSimple(licencia.fecha_inicio)}</span>
-                          <span>Hasta: {formatDateSimple(licencia.fecha_termino)}</span>
+                        <div className="flex flex-col text-[11px] text-gray-500">
+                          <span>{formatDateSimple(licencia.fecha_inicio)}</span>
+                          <span>{formatDateSimple(licencia.fecha_termino)}</span>
                         </div>
                       </div>
                     </div>
                   </td>
 
-                  {/* ESTADO Y OBSERVACIONES EDITADO */}
+                  {/* ESTADO */}
                   <td className="px-6 py-4">
-                    <div className="flex flex-col gap-2 max-w-[250px]">
-                      <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusConfig.badge}`}>
-                          {statusConfig.label.toUpperCase()}
+                    <div className="flex flex-col gap-1">
+                      <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusConfig.badge}`}>
+                        {statusConfig.label.toUpperCase()}
+                      </span>
+                      {licencia.esta_vigente && licencia.estado === 'aprobada' && (
+                        <span className="text-[9px] text-blue-600 font-black animate-pulse text-center">
+                          ● EN CURSO
                         </span>
-                        {licencia.esta_vigente && licencia.estado === 'aprobada' && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200 animate-pulse">
-                            EN CURSO
-                          </span>
-                        )}
+                      )}
+                    </div>
+                  </td>
+
+                  {/* OBSERVACIONES */}
+                  <td className="px-6 py-4">
+                    <div className="flex items-start gap-2 max-w-[180px]">
+                      <MessageSquare className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${licencia.comentarios_revision ? 'text-amber-500' : 'text-gray-300'}`} />
+                      <p className={`text-[11px] leading-tight line-clamp-2 ${licencia.comentarios_revision ? 'text-gray-700 italic' : 'text-gray-400'}`}>
+                        {licencia.comentarios_revision || 'Sin observaciones'}
+                      </p>
+                    </div>
+                  </td>
+
+                  {/* VALIDADO POR */}
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600 shrink-0">
+                        {licencia.revisada_por_nombre ? licencia.revisada_por_nombre.charAt(0) : <Clock className="w-3 h-3 text-gray-400" />}
                       </div>
-
-                      {/* Mensaje de error/rechazo para el funcionario */}
-                      {licencia.estado === 'rechazada' && licencia.comentarios_revision && (
-                        <div className="flex items-start gap-1.5 p-2 bg-red-50 border border-red-100 rounded-lg">
-                          <MessageSquare className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
-                          <p className="text-[11px] text-red-700 leading-tight">
-                            <span className="font-bold">Corrección:</span> {licencia.comentarios_revision}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Información de quién aprobó */}
-                      {licencia.estado === 'aprobada' && licencia.revisada_por_nombre && (
-                        <div className="flex items-center gap-1 text-[10px] text-gray-400">
-                          <ShieldCheck className="w-3 h-3" />
-                          <span>Validado por: {licencia.revisada_por_nombre}</span>
-                        </div>
-                      )}
+                      <span className="text-[11px] font-medium text-gray-700 truncate max-w-[100px]">
+                        {licencia.revisada_por_nombre || 'Pendiente'}
+                      </span>
                     </div>
                   </td>
 
                   {/* FECHA CARGA */}
                   <td className="px-6 py-4">
-                    <p className="text-xs text-gray-500">{formatDate(licencia.creado_en)}</p>
+                    <p className="text-[11px] text-gray-500">{formatDate(licencia.creado_en)}</p>
                   </td>
 
                   {/* ACCIONES */}
-                  <td className="px-6 py-4 text-center">
+                  <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-1">
-                      <button 
-                        onClick={() => onView(licencia)} 
-                        title="Ver detalles"
-                        className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => onView(licencia)}
+                        className="h-8 px-2 text-[#009DDC] hover:bg-blue-50 gap-1.5 text-[10px] font-bold"
                       >
-                        <Eye className="w-4 h-4" />
-                      </button>
+                        <Eye className="w-3.5 h-3.5" />
+                        DETALLES
+                      </Button>
+                      
+                      <div className="h-4 w-[1px] bg-gray-200 mx-1" />
+
                       <button 
                         onClick={() => onDownload(licencia)} 
-                        title="Descargar"
-                        className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
+                        title="Descargar PDF"
+                        className="p-1.5 text-gray-400 hover:text-green-600 transition-colors"
                       >
                         <Download className="w-4 h-4" />
                       </button>
                       
-                      {/* Solo se permite eliminar si está pendiente o rechazada (para corregir) */}
                       {licencia.estado !== 'aprobada' && (
                         <button 
                           onClick={() => onDelete(licencia.id)} 
-                          title="Eliminar para re-subir"
-                          className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                          title="Eliminar registro"
+                          className="p-1.5 text-gray-400 hover:text-red-600 transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
