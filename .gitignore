@@ -5,6 +5,7 @@
 .env.*.local
 *.env
 backend/**/.env
+backend/env
 
 # --- BACKEND (Python/Django) ---
 # Entorno virtual
