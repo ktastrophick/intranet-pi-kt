@@ -1,202 +1,188 @@
 // ======================================================
 // TIPOS Y INTERFACES - Usuario CESFAM
 // Ubicación: src/types/usuario.ts
-// Descripción: Interfaces que coinciden 100% con models.py
+// Descripción: Interfaces sincronizadas con models.py y serializers.py (Django)
 // ======================================================
 
 /**
- * Interface completa del Usuario (desde la BD)
+ * Interface completa del Usuario
+ * Refleja el UsuarioDetailSerializer del backend
  */
 export interface Usuario {
   // Identificación
-  id: string;
-  rut: string;
+  id: string; // UUID
+  rut: string; // Formato XX.XXX.XXX-X
   
   // Datos personales
   nombre: string;
   apellido_paterno: string;
   apellido_materno: string;
+  nombre_completo: string; // Generado por el backend
   email: string;
-  telefono?: string;
-  fecha_nacimiento?: string;
+  telefono: string;
+  fecha_nacimiento?: string; // ISO Date string
   direccion?: string;
   
   // Información profesional
   cargo: string;
-  area: string;  // UUID del área
-  rol: string;   // UUID del rol
-  fecha_ingreso: string;
+  area: string;         // UUID
+  area_nombre: string;  // Desde serializer
+  rol: string;          // UUID
+  rol_nombre: string;   // Desde serializer
+  rol_nivel: number;    // 1: Funcionario, 2: Jefatura, 3: Subdirección, 4: Dirección
+  
+  tipo_contrato: string;        // UUID
+  tipo_contrato_nombre: string; // Desde serializer
+  fecha_ingreso: string;        // ISO Date string
   es_jefe_de_area: boolean;
   
-  // Contacto de emergencia
-  contacto_emergencia_nombre?: string;
-  contacto_emergencia_telefono?: string;
-  contacto_emergencia_relacion?: string;
-  
-  // Días disponibles (auto-calculados)
-  dias_vacaciones_anuales: number;
-  dias_vacaciones_disponibles: number;
-  dias_vacaciones_usados: number;
-  dias_administrativos_anuales: number;
-  dias_administrativos_disponibles: number;
-  dias_administrativos_usados: number;
+  // --- GESTIÓN DE TIEMPOS Y DÍAS (BOLSAS) ---
+  dias_vacaciones_disponibles: number;      // Enteros
+  dias_administrativos_disponibles: number; // Decimal (permite 0.5)
+  dias_sin_goce_acumulados: number;         // Decimal (acumulativo)
+  horas_devolucion_disponibles: number;     // Decimal (en horas)
+
+  // --- PERMISOS GRANULARES (Vienen del Rol) ---
+  rol_puede_crear_usuarios: boolean;
+  rol_puede_eliminar_contenido: boolean;
+  rol_puede_aprobar_solicitudes: boolean;
+  rol_puede_subir_documentos: boolean;
+  rol_puede_crear_actividades: boolean;
+  rol_puede_crear_anuncios: boolean;
+  rol_puede_gestionar_licencias: boolean;
+  rol_puede_ver_reportes: boolean;
+  rol_puede_editar_calendario: boolean;
   
   // Avatar y preferencias
-  avatar?: string;
+  avatar: string | null; // URL de la imagen
   tema_preferido: 'light' | 'dark';
   
-  // Estado y permisos
+  // Estado y Auditoría
   is_active: boolean;
   is_staff: boolean;
-  
-  // Auditoría
   creado_en: string;
   actualizado_en: string;
-  ultimo_acceso?: string;
+  ultimo_acceso: string | null;
 }
 
 /**
  * DTO para crear un nuevo usuario
- * (Solo los campos que el usuario debe ingresar)
+ * Coincide con UsuarioCreateSerializer
  */
 export interface CrearUsuarioDTO {
-  // OBLIGATORIOS
   rut: string;
   nombre: string;
   apellido_paterno: string;
   apellido_materno: string;
   email: string;
-  password: string;
-  cargo: string;
-  area: string;  // UUID
-  rol: string;   // UUID
-  fecha_ingreso: string;
-  
-  // OPCIONALES - Contacto
+  password?: string;
+  password_confirm?: string;
   telefono?: string;
   fecha_nacimiento?: string;
   direccion?: string;
+  cargo: string;
+  area: string; // UUID
+  rol: string;  // UUID
+  tipo_contrato: string; // UUID
+  fecha_ingreso: string;
+  es_jefe_de_area: boolean;
   
-  // OPCIONALES - Emergencia
-  contacto_emergencia_nombre?: string;
-  contacto_emergencia_telefono?: string;
-  contacto_emergencia_relacion?: string;
-  
-  // OPCIONALES - Otros
-  avatar?: File;
-  es_jefe_de_area?: boolean;
+  // Saldos iniciales opcionales
+  dias_vacaciones_disponibles?: number;
+  dias_administrativos_disponibles?: number;
+  horas_devolucion_disponibles?: number;
 }
 
 /**
  * DTO para editar usuario
- * (Similar a crear pero sin password obligatorio)
  */
-export interface EditarUsuarioDTO {
-  // OBLIGATORIOS
-  rut: string;
-  nombre: string;
-  apellido_paterno: string;
-  apellido_materno: string;
-  email: string;
-  cargo: string;
-  area: string;
-  rol: string;
-  fecha_ingreso: string;
-  
-  // OPCIONALES
-  password?: string;  // Solo si se quiere cambiar
-  telefono?: string;
-  fecha_nacimiento?: string;
-  direccion?: string;
-  contacto_emergencia_nombre?: string;
-  contacto_emergencia_telefono?: string;
-  contacto_emergencia_relacion?: string;
-  avatar?: File;
-  es_jefe_de_area?: boolean;
+export interface EditarUsuarioDTO extends Partial<CrearUsuarioDTO> {
+  id: string;
   is_active?: boolean;
 }
 
 /**
- * Errores del formulario
- */
-export interface UsuarioFormErrors {
-  rut?: string;
-  nombre?: string;
-  apellido_paterno?: string;
-  apellido_materno?: string;
-  email?: string;
-  password?: string;
-  cargo?: string;
-  area?: string;
-  rol?: string;
-  fecha_ingreso?: string;
-  telefono?: string;
-  fecha_nacimiento?: string;
-}
-
-/**
- * Props del componente FormularioUsuario
- */
-export interface FormularioUsuarioProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSubmit: (usuario: CrearUsuarioDTO | EditarUsuarioDTO) => void;
-  usuarioEditar?: Usuario;
-  modo?: 'crear' | 'editar';
-}
-
-/**
- * Rol del sistema (desde backend)
+ * Interface para Rol (desde backend)
  */
 export interface Rol {
   id: string;
   nombre: string;
-  descripcion?: string;
+  descripcion: string;
   nivel: 1 | 2 | 3 | 4;
+  // Flags de permisos
+  puede_crear_usuarios: boolean;
+  puede_eliminar_contenido: boolean;
+  puede_aprobar_solicitudes: boolean;
+  puede_subir_documentos: boolean;
+  puede_crear_actividades: boolean;
+  puede_crear_anuncios: boolean;
+  puede_gestionar_licencias: boolean;
+  puede_ver_reportes: boolean;
+  puede_editar_calendario: boolean;
 }
 
 /**
- * Área del sistema (desde backend)
+ * Interface para Área (desde backend)
  */
 export interface Area {
   id: string;
   nombre: string;
-  descripcion?: string;
+  descripcion: string;
   codigo: string;
   color: string;
   icono: string;
+  jefe: string | null; // UUID del usuario jefe
+  jefe_nombre: string | null;
+  total_funcionarios: number;
   activa: boolean;
 }
 
 /**
- * Helper: Obtener nombre completo
+ * Interface para Tipo de Contrato
  */
-export function getNombreCompleto(usuario: Usuario): string {
-  return `${usuario.nombre} ${usuario.apellido_paterno} ${usuario.apellido_materno}`.trim();
+export interface TipoContrato {
+  id: string;
+  nombre: string;
+  descripcion?: string;
 }
 
+// ======================================================
+// HELPERS
+// ======================================================
+
 /**
- * Helper: Validar RUT chileno
+ * Helper: Validar RUT chileno (con puntos y guión)
  */
 export function validarRUT(rut: string): boolean {
-  // Formato: XX.XXX.XXX-X
   const regex = /^\d{1,2}\.\d{3}\.\d{3}-[\dkK]$/;
   return regex.test(rut);
 }
 
 /**
- * Helper: Formatear RUT
+ * Helper: Formatear RUT a formato XX.XXX.XXX-X
  */
 export function formatearRUT(rut: string): string {
-  // Limpia el RUT y lo formatea
-  const cleaned = rut.replace(/[^\dkK]/g, '');
-  if (cleaned.length < 2) return cleaned;
+  let value = rut.replace(/\./g, '').replace('-', '');
   
-  const dv = cleaned.slice(-1);
-  const numbers = cleaned.slice(0, -1);
+  if (value.length < 2) return value;
   
-  // Agregar puntos
-  const formatted = numbers.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const dv = value.slice(-1);
+  let cuerpo = value.slice(0, -1);
   
-  return `${formatted}-${dv}`;
+  cuerpo = cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
+  return cuerpo + '-' + dv;
+}
+
+/**
+ * Helper: Obtener el label del nivel de rol
+ */
+export function getLabelNivel(nivel: number): string {
+  const niveles: Record<number, string> = {
+    1: 'Funcionario',
+    2: 'Jefatura',
+    3: 'Subdirección',
+    4: 'Dirección'
+  };
+  return niveles[nivel] || 'Desconocido';
 }

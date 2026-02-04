@@ -1,197 +1,55 @@
-// ======================================================
-// TIPOS Y INTERFACES - Solicitudes de Vacaciones y Días Administrativos
-// Ubicación: src/types/solicitud.ts
-// ======================================================
+export type TipoSolicitud = 
+  | 'vacaciones' 
+  | 'dia_administrativo' 
+  | 'permiso_sin_goce' 
+  | 'devolucion_tiempo' 
+  | 'otro_permiso';
 
-/**
- * Tipo de solicitud
- */
-export type TipoSolicitud = 'vacaciones' | 'dia_administrativo';
-
-/**
- * Estado de la solicitud
- */
 export type EstadoSolicitud = 
-  | 'pendiente_jefatura'      // Esperando aprobación de jefatura
-  | 'aprobada_jefatura'       // Aprobada por jefatura, pendiente admin
-  | 'rechazada_jefatura'      // Rechazada por jefatura
-  | 'pendiente_administracion' // Esperando aprobación de administración
-  | 'aprobada'                // Aprobada completamente
-  | 'rechazada_administracion' // Rechazada por administración
-  | 'cancelada';              // Cancelada por el usuario
+  | 'pendiente_jefatura'
+  | 'pendiente_direccion'
+  | 'aprobada'
+  | 'rechazada'
+  | 'anulada_usuario'
+  | 'solicitud_anulacion_licencia'
+  | 'anulada_por_licencia';
 
-/**
- * Interface para aprobación
- */
-export interface Aprobacion {
-  nivel: 'jefatura' | 'administracion';
-  aprobadoPor: string;
-  nombreAprobador: string;
-  fecha: Date;
-  comentarios?: string;
-  accion: 'aprobada' | 'rechazada';
-}
-
-/**
- * Interface principal de una solicitud
- */
-export interface SolicitudVacaciones {
+export interface Solicitud {
   id: string;
+  numero_solicitud: string;
+  usuario: string; // UUID
+  usuario_nombre: string;
+  usuario_area: string;
   tipo: TipoSolicitud;
-  usuario: {
-    id: string;
-    rut: string;
-    nombre: string;
-    apellidos: string;
-    area: string;
-    cargo: string;
-    email: string;
-  };
-  fechaInicio: Date;
-  fechaTermino: Date;
-  diasSolicitados: number;
-  motivo?: string;
+  nombre_otro_permiso?: string; // Nuevo
+  fecha_inicio: string;
+  fecha_termino: string;
+  cantidad_dias: number; // Decimal en backend, number en TS
+  es_medio_dia: boolean; // Nuevo
+  motivo: string;
+  telefono_contacto: string;
   estado: EstadoSolicitud;
-  fechaSolicitud: Date;
   
   // Aprobaciones
-  aprobacionJefatura?: Aprobacion;
-  aprobacionAdministracion?: Aprobacion;
+  jefatura_aprobador_nombre?: string;
+  fecha_aprobacion_jefatura?: string;
+  direccion_aprobador_nombre?: string;
+  fecha_aprobacion_direccion?: string;
+  comentarios_administracion?: string;
   
-  // Información adicional
-  diasDisponibles?: number;
-  diasUsados?: number;
-  
-  // Metadata
-  createdAt: Date;
-  updatedAt: Date;
+  pdf_generado: boolean;
+  url_pdf: string;
+  creada_en: string;
+  actualizada_en: string;
 }
 
-/**
- * Interface para crear una solicitud
- */
-export interface CrearSolicitudData {
-  tipo: TipoSolicitud;
-  fechaInicio: Date;
-  fechaTermino: Date;
-  diasSolicitados: number;
-  motivo?: string;
-}
-
-/**
- * Interface para aprobar/rechazar una solicitud
- */
-export interface AccionSolicitudData {
-  solicitudId: string;
-  accion: 'aprobar' | 'rechazar';
-  comentarios?: string;
-  nivel: 'jefatura' | 'administracion';
-}
-
-/**
- * Props para componentes de solicitudes
- */
-export interface SolicitudCardProps {
-  solicitud: SolicitudVacaciones;
-  onAprobar: (id: string, comentarios?: string) => void;
-  onRechazar: (id: string, comentarios?: string) => void;
-  onVerDetalle: (solicitud: SolicitudVacaciones) => void;
-  userRole: 'admin' | 'jefatura';
-}
-
-/**
- * Configuración de colores por estado
- */
-export const ESTADO_CONFIG: Record<EstadoSolicitud, {
-  label: string;
-  badge: string;
-  icon: string;
-  descripcion: string;
-}> = {
-  pendiente_jefatura: {
-    label: 'Pendiente Jefatura',
-    badge: 'bg-yellow-100 text-yellow-700 border-yellow-300',
-    icon: '⏳',
-    descripcion: 'Esperando aprobación de jefatura'
-  },
-  aprobada_jefatura: {
-    label: 'Aprobada por Jefatura',
-    badge: 'bg-blue-100 text-blue-700 border-blue-300',
-    icon: '✓',
-    descripcion: 'Aprobada por jefatura, pendiente de administración'
-  },
-  rechazada_jefatura: {
-    label: 'Rechazada por Jefatura',
-    badge: 'bg-red-100 text-red-700 border-red-300',
-    icon: '✗',
-    descripcion: 'Rechazada por jefatura'
-  },
-  pendiente_administracion: {
-    label: 'Pendiente Administración',
-    badge: 'bg-orange-100 text-orange-700 border-orange-300',
-    icon: '⏳',
-    descripcion: 'Esperando aprobación de administración'
-  },
-  aprobada: {
-    label: 'Aprobada',
-    badge: 'bg-green-100 text-green-700 border-green-300',
-    icon: '✓✓',
-    descripcion: 'Aprobada completamente'
-  },
-  rechazada_administracion: {
-    label: 'Rechazada por Administración',
-    badge: 'bg-red-100 text-red-700 border-red-300',
-    icon: '✗',
-    descripcion: 'Rechazada por administración'
-  },
-  cancelada: {
-    label: 'Cancelada',
-    badge: 'bg-gray-100 text-gray-700 border-gray-300',
-    icon: '⊘',
-    descripcion: 'Cancelada por el usuario'
-  }
+// Configuración extendida para los badges
+export const ESTADO_CONFIG: Record<EstadoSolicitud, { label: string; badge: string }> = {
+  pendiente_jefatura: { label: 'Pendiente Jefatura', badge: 'bg-yellow-100 text-yellow-700' },
+  pendiente_direccion: { label: 'Pendiente Dirección', badge: 'bg-orange-100 text-orange-700' },
+  aprobada: { label: 'Aprobada', badge: 'bg-green-100 text-green-700' },
+  rechazada: { label: 'Rechazada', badge: 'bg-red-100 text-red-700' },
+  anulada_usuario: { label: 'Anulada por Usuario', badge: 'bg-gray-100 text-gray-700' },
+  solicitud_anulacion_licencia: { label: 'Anulación por Licencia', badge: 'bg-purple-100 text-purple-700' },
+  anulada_por_licencia: { label: 'Anulada (Licencia)', badge: 'bg-indigo-100 text-indigo-700' },
 };
-
-/**
- * Configuración de tipos de solicitud
- */
-export const TIPO_SOLICITUD_CONFIG: Record<TipoSolicitud, {
-  label: string;
-  badge: string;
-  icon: string;
-}> = {
-  vacaciones: {
-    label: 'Vacaciones',
-    badge: 'bg-blue-100 text-blue-700 border-blue-300',
-    icon: '🏖️'
-  },
-  dia_administrativo: {
-    label: 'Día Administrativo',
-    badge: 'bg-purple-100 text-purple-700 border-purple-300',
-    icon: '📋'
-  }
-};
-
-/**
- * Filtros disponibles para las solicitudes
- */
-export interface FiltrosSolicitudes {
-  estado?: EstadoSolicitud[];
-  tipo?: TipoSolicitud[];
-  area?: string[];
-  fechaDesde?: Date;
-  fechaHasta?: Date;
-  busqueda?: string;
-}
-
-/**
- * Estadísticas de solicitudes
- */
-export interface EstadisticasSolicitudes {
-  total: number;
-  pendientesJefatura: number;
-  pendientesAdministracion: number;
-  aprobadas: number;
-  rechazadas: number;
-  porArea: Record<string, number>;
-}
