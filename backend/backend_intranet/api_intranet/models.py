@@ -9,17 +9,33 @@ from django.core.validators import RegexValidator, MinValueValidator, MaxValueVa
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 import uuid
+from decimal import Decimal  # <--- Agregar esta línea
+
 
 
 # ======================================================
-# 1. GESTIÓN DE USUARIOS Y AUTENTICACIÓN
+# 1. GESTIÓN DE USUARIOS, CONTRATOS Y AUTENTICACIÓN
 # ======================================================
+
+class TipoContrato(models.Model):
+    """
+    Tipos de contrato (Indefinido, Plazo Fijo, etc.)
+    Gestionable por Dirección/Subdirección.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    nombre = models.CharField(max_length=100, unique=True)
+    descripcion = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        verbose_name = 'Tipo de Contrato'
+        verbose_name_plural = 'Tipos de Contrato'
+
+    def __str__(self):
+        return self.nombre
+
 
 class UsuarioManager(BaseUserManager):
-    """Manager personalizado para el modelo Usuario"""
-    
     def create_user(self, rut, email, password=None, **extra_fields):
-        """Crea y guarda un Usuario normal"""
         if not rut:
             raise ValueError('El usuario debe tener un RUT')
         if not email:
@@ -32,28 +48,18 @@ class UsuarioManager(BaseUserManager):
         return user
     
     def create_superuser(self, rut, email, password=None, **extra_fields):
-        """Crea y guarda un superusuario (Dirección)"""
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
-        
-        if extra_fields.get('is_staff') is not True:
-            raise ValueError('Superuser debe tener is_staff=True')
-        if extra_fields.get('is_superuser') is not True:
-            raise ValueError('Superuser debe tener is_superuser=True')
-        
         return self.create_user(rut, email, password, **extra_fields)
 
 
 class Rol(models.Model):
-    """
-    Roles del sistema con permisos jerárquicos
-    """
     NIVEL_CHOICES = [
-        (1, 'Funcionario'),       # Nivel más bajo
-        (2, 'Jefatura'),          # Jefe de área
-        (3, 'Subdirección'),      # Subdirección Administrativa o Clínica
-        (4, 'Dirección'),         # Nivel máximo
+        (1, 'Funcionario'),
+        (2, 'Jefatura'),
+        (3, 'Subdirección'),
+        (4, 'Dirección'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -72,7 +78,6 @@ class Rol(models.Model):
     puede_ver_reportes = models.BooleanField(default=False)
     puede_editar_calendario = models.BooleanField(default=False)
     
-    # Auditoría
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
     
@@ -86,17 +91,13 @@ class Rol(models.Model):
 
 
 class Area(models.Model):
-    """
-    Áreas o Departamentos del CESFAM
-    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     nombre = models.CharField(max_length=100, unique=True)
     descripcion = models.TextField(blank=True)
-    codigo = models.CharField(max_length=20, unique=True)  # Ej: MED-001
-    color = models.CharField(max_length=7, default='#3B82F6')  # Color en hex
-    icono = models.CharField(max_length=50, default='🏥')  # Emoji o nombre de icono
+    codigo = models.CharField(max_length=20, unique=True)
+    color = models.CharField(max_length=7, default='#3B82F6')
+    icono = models.CharField(max_length=50, default='🏥')
     
-    # Jefatura del área
     jefe = models.ForeignKey(
         'Usuario',
         on_delete=models.SET_NULL,
@@ -105,7 +106,6 @@ class Area(models.Model):
         related_name='area_a_cargo'
     )
     
-    # Metadata
     activa = models.BooleanField(default=True)
     creada_en = models.DateTimeField(auto_now_add=True)
     actualizada_en = models.DateTimeField(auto_now=True)
@@ -120,25 +120,14 @@ class Area(models.Model):
 
 
 class Usuario(AbstractBaseUser, PermissionsMixin):
-    """
-    Modelo de Usuario personalizado para el CESFAM
-    """
-    # Validador de RUT chileno
     rut_validator = RegexValidator(
         regex=r'^\d{1,2}\.\d{3}\.\d{3}-[\dkK]$',
         message='El RUT debe tener formato XX.XXX.XXX-X'
     )
     
-    # Identificación
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    rut = models.CharField(
-        max_length=12,
-        unique=True,
-        validators=[rut_validator],
-        help_text='Formato: XX.XXX.XXX-X'
-    )
+    rut = models.CharField(max_length=12, unique=True, validators=[rut_validator])
     
-    # Datos personales
     nombre = models.CharField(max_length=100)
     apellido_paterno = models.CharField(max_length=100)
     apellido_materno = models.CharField(max_length=100)
@@ -147,74 +136,37 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     fecha_nacimiento = models.DateField(null=True, blank=True)
     direccion = models.TextField(blank=True)
     
-    # Información profesional
     cargo = models.CharField(max_length=150)
-    area = models.ForeignKey(
-        Area,
-        on_delete=models.PROTECT,
-        related_name='funcionarios'
-    )
-    rol = models.ForeignKey(
-        Rol,
-        on_delete=models.PROTECT,
-        related_name='usuarios'
-    )
+    area = models.ForeignKey(Area, on_delete=models.PROTECT, related_name='funcionarios')
+    rol = models.ForeignKey(Rol, on_delete=models.PROTECT, related_name='usuarios')
+    tipo_contrato = models.ForeignKey(TipoContrato, on_delete=models.PROTECT, related_name='usuarios')
     fecha_ingreso = models.DateField()
-    
-    # Jefatura (para usuarios que son jefes)
     es_jefe_de_area = models.BooleanField(default=False)
     
-    # Contacto de emergencia
-    contacto_emergencia_nombre = models.CharField(max_length=200, blank=True)
-    contacto_emergencia_telefono = models.CharField(max_length=20, blank=True)
-    contacto_emergencia_relacion = models.CharField(max_length=100, blank=True)
+    # --- GESTIÓN DE TIEMPOS Y DÍAS ---
+    # Vacaciones (Días enteros)
+    dias_vacaciones_disponibles = models.IntegerField(default=15, validators=[MinValueValidator(0)])
     
-    # DÍAS DISPONIBLES (NUEVO)
-    dias_vacaciones_anuales = models.IntegerField(
-        default=15,
-        validators=[MinValueValidator(0), MaxValueValidator(30)],
-        help_text='Días de vacaciones totales por año'
-    )
-    dias_vacaciones_disponibles = models.IntegerField(
-        default=15,
-        validators=[MinValueValidator(0)],
-        help_text='Días de vacaciones disponibles actualmente'
-    )
-    dias_vacaciones_usados = models.IntegerField(
-        default=0,
-        validators=[MinValueValidator(0)],
-        help_text='Días de vacaciones ya utilizados este año'
+    # Administrativos (Permite medios días, ej: 5.5)
+    dias_administrativos_disponibles = models.DecimalField(
+        max_digits=3, decimal_places=1, default=6.0, 
+        validators=[MinValueValidator(0), MaxValueValidator(6)]
     )
     
-    dias_administrativos_anuales = models.IntegerField(
-        default=6,
-        validators=[MinValueValidator(0), MaxValueValidator(10)],
-        help_text='Días administrativos totales por año'
-    )
-    dias_administrativos_disponibles = models.IntegerField(
-        default=6,
-        validators=[MinValueValidator(0)],
-        help_text='Días administrativos disponibles actualmente'
-    )
-    dias_administrativos_usados = models.IntegerField(
-        default=0,
-        validators=[MinValueValidator(0)],
-        help_text='Días administrativos ya utilizados este año'
-    )
+    # Permisos sin goce (Solo acumulativo, no descuenta de otros)
+    dias_sin_goce_acumulados = models.DecimalField(max_digits=5, decimal_places=1, default=0.0)
     
+    # Devolución de tiempo (En horas)
+    horas_devolucion_disponibles = models.DecimalField(max_digits=5, decimal_places=1, default=0.0)
+
     # Avatar y preferencias
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     tema_preferido = models.CharField(
-        max_length=10,
-        choices=[('light', 'Claro'), ('dark', 'Oscuro')],
-        default='light'
+        max_length=10, choices=[('light', 'Claro'), ('dark', 'Oscuro')], default='light'
     )
     
-    # Estado y permisos de Django
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
-    
-    # Auditoría
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
     ultimo_acceso = models.DateTimeField(null=True, blank=True)
@@ -227,62 +179,36 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     class Meta:
         verbose_name = 'Usuario'
         verbose_name_plural = 'Usuarios'
-        ordering = ['apellido_paterno', 'apellido_materno', 'nombre']
-        indexes = [
-            models.Index(fields=['rut']),
-            models.Index(fields=['email']),
-            models.Index(fields=['area', 'rol']),
-        ]
-    
+        ordering = ['apellido_paterno', 'nombre']
+
     def __str__(self):
         return f"{self.get_nombre_completo()} ({self.rut})"
     
     def get_nombre_completo(self):
-        """Retorna nombre completo del usuario"""
         return f"{self.nombre} {self.apellido_paterno} {self.apellido_materno}"
-    
-    def puede_aprobar_solicitud(self, solicitud):
-        """Verifica si el usuario puede aprobar una solicitud"""
-        # Dirección puede aprobar todo
-        if self.rol.nivel == 4:
-            return True
-        
-        # Subdirección puede aprobar todo
-        if self.rol.nivel == 3:
-            return True
-        
-        # Jefatura solo puede aprobar de su área
-        if self.rol.nivel == 2 and solicitud.usuario.area == self.area:
-            return True
-        
-        return False
-    
-    def actualizar_dias_disponibles(self):
-        """Recalcula días disponibles basado en solicitudes aprobadas"""
-        # Calcular días de vacaciones usados
-        vacaciones_usadas = self.solicitudes.filter(
-            tipo='vacaciones',
-            estado='aprobada'
-        ).aggregate(
-            total=models.Sum('cantidad_dias')
-        )['total'] or 0
-        
-        # Calcular días administrativos usados
-        admin_usados = self.solicitudes.filter(
-            tipo='dia_administrativo',
-            estado='aprobada'
-        ).aggregate(
-            total=models.Sum('cantidad_dias')
-        )['total'] or 0
-        
-        # Actualizar
-        self.dias_vacaciones_usados = vacaciones_usadas
-        self.dias_vacaciones_disponibles = self.dias_vacaciones_anuales - vacaciones_usadas
-        
-        self.dias_administrativos_usados = admin_usados
-        self.dias_administrativos_disponibles = self.dias_administrativos_anuales - admin_usados
+
+    def actualizar_dias_disponibles(self, tipo_solicitud, cantidad, operacion='descontar'):
+        """
+        Actualiza los saldos del usuario. 
+        Operacion: 'descontar' o 'restituir' (para el caso de licencias)
+        """
+        factor = -1 if operacion == 'descontar' else 1
+        cantidad = Decimal(str(cantidad))
+
+        if tipo_solicitud == 'vacaciones':
+            self.dias_vacaciones_disponibles += int(factor * cantidad)
+        elif tipo_solicitud == 'dia_administrativo':
+            self.dias_administrativos_disponibles += (Decimal(factor) * cantidad)
+        elif tipo_solicitud == 'devolucion_tiempo':
+            self.horas_devolucion_disponibles += (Decimal(factor) * cantidad)
+        elif tipo_solicitud == 'permiso_sin_goce':
+            if operacion == 'descontar': # En sin goce solo sumamos al acumulado
+                self.dias_sin_goce_acumulados += cantidad
+            else:
+                self.dias_sin_goce_acumulados -= cantidad
         
         self.save()
+
 
 
 # ======================================================
@@ -482,142 +408,153 @@ class AdjuntoAnuncio(models.Model):
 
 
 # ======================================================
-# 3. GESTIÓN DE SOLICITUDES (Vacaciones y Días Admin)
+# 2. GESTIÓN DE SOLICITUDES (Vacaciones, Admin, etc.)
 # ======================================================
 
 class Solicitud(models.Model):
-    """
-    Solicitudes de vacaciones y días administrativos
-    """
     TIPO_CHOICES = [
         ('vacaciones', 'Vacaciones'),
         ('dia_administrativo', 'Día Administrativo'),
+        ('permiso_sin_goce', 'Permiso sin goce de remuneraciones'),
+        ('devolucion_tiempo', 'Devolución de tiempo libre'),
+        ('otro_permiso', 'Otros Permisos'),
     ]
     
     ESTADO_CHOICES = [
         ('pendiente_jefatura', 'Pendiente Jefatura'),
-        ('aprobada_jefatura', 'Aprobada por Jefatura'),
-        ('rechazada_jefatura', 'Rechazada por Jefatura'),
-        ('pendiente_direccion', 'Pendiente Dirección'),
+        ('pendiente_direccion', 'Pendiente Dirección/Subdirección'),
         ('aprobada', 'Aprobada Completamente'),
-        ('rechazada_direccion', 'Rechazada por Dirección'),
-        ('cancelada', 'Cancelada'),
+        ('rechazada', 'Rechazada'),
+        ('anulada_usuario', 'Anulada por Usuario'),
+        ('solicitud_anulacion_licencia', 'Anulación solicitada por Licencia'),
+        ('anulada_por_licencia', 'Anulada por Licencia Médica'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     numero_solicitud = models.CharField(max_length=20, unique=True, editable=False)
-    
-    # Solicitante
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='solicitudes')
     
-    # Tipo y fechas
-    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    tipo = models.CharField(max_length=30, choices=TIPO_CHOICES)
+    nombre_otro_permiso = models.CharField(max_length=100, blank=True, null=True, help_text="Solo si el tipo es 'Otro Permiso'")
+    
     fecha_inicio = models.DateField()
     fecha_termino = models.DateField()
-    cantidad_dias = models.IntegerField(validators=[MinValueValidator(1)])
+    cantidad_dias = models.DecimalField(max_digits=4, decimal_places=1, validators=[MinValueValidator(0.5)])
+    es_medio_dia = models.BooleanField(default=False, help_text="Solo aplica para días administrativos")
     
-    # Detalles
     motivo = models.TextField()
     telefono_contacto = models.CharField(max_length=20)
-    
-    # Estado
     estado = models.CharField(max_length=30, choices=ESTADO_CHOICES, default='pendiente_jefatura')
-    fecha_solicitud = models.DateTimeField(auto_now_add=True)
     
-    # Aprobación Jefatura
-    aprobada_por_jefatura = models.BooleanField(null=True, blank=True)
-    jefatura_aprobador = models.ForeignKey(
-        Usuario,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='solicitudes_aprobadas_jefatura'
-    )
+    # Aprobaciones
+    jefatura_aprobador = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True, related_name='solicitudes_visto_jefe')
     fecha_aprobacion_jefatura = models.DateTimeField(null=True, blank=True)
-    comentarios_jefatura = models.TextField(blank=True)
     
-    # Aprobación Dirección/Subdirección
-    aprobada_por_direccion = models.BooleanField(null=True, blank=True)
-    direccion_aprobador = models.ForeignKey(
-        Usuario,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='solicitudes_aprobadas_direccion'
-    )
+    direccion_aprobador = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True, related_name='solicitudes_visto_dir')
     fecha_aprobacion_direccion = models.DateTimeField(null=True, blank=True)
-    comentarios_direccion = models.TextField(blank=True)
     
-    # Documento generado
+    comentarios_administracion = models.TextField(blank=True)
+    
+    # Documentos
     pdf_generado = models.BooleanField(default=False)
     url_pdf = models.CharField(max_length=500, blank=True)
     
-    # Auditoría
     creada_en = models.DateTimeField(auto_now_add=True)
     actualizada_en = models.DateTimeField(auto_now=True)
     
     class Meta:
         verbose_name = 'Solicitud'
         verbose_name_plural = 'Solicitudes'
-        ordering = ['-fecha_solicitud']
-        indexes = [
-            models.Index(fields=['usuario', 'estado']),
-            models.Index(fields=['fecha_inicio', 'fecha_termino']),
-            models.Index(fields=['estado']),
-        ]
-    
+        ordering = ['-creada_en']
+
     def __str__(self):
-        return f"{self.numero_solicitud} - {self.usuario.get_nombre_completo()} ({self.get_tipo_display()})"
-    
+        return f"{self.numero_solicitud} - {self.usuario.get_nombre_completo()}"
+
+    def clean(self):
+        """Validaciones de negocio"""
+        if self.fecha_inicio > self.fecha_termino:
+            raise ValidationError("La fecha de término no puede ser anterior a la de inicio.")
+
+        if self.tipo == 'vacaciones':
+            if self.cantidad_dias % 1 != 0:
+                raise ValidationError("Las vacaciones solo pueden pedirse por días enteros.")
+            if self.cantidad_dias > self.usuario.dias_vacaciones_disponibles:
+                raise ValidationError(f"No tiene suficientes días de vacaciones. Disponibles: {self.usuario.dias_vacaciones_disponibles}")
+
+        if self.tipo == 'dia_administrativo':
+            if self.cantidad_dias > self.usuario.dias_administrativos_disponibles:
+                raise ValidationError(f"No tiene suficientes días administrativos. Disponibles: {self.usuario.dias_administrativos_disponibles}")
+
+        if self.tipo == 'devolucion_tiempo':
+            # Asumiendo que cantidad_dias aquí representa HORAS
+            if self.cantidad_dias > self.usuario.horas_devolucion_disponibles:
+                raise ValidationError(f"No tiene suficientes horas de devolución. Disponibles: {self.usuario.horas_devolucion_disponibles}")
+
     def save(self, *args, **kwargs):
-        # Generar número de solicitud automáticamente
         if not self.numero_solicitud:
             year = timezone.now().year
-            count = Solicitud.objects.filter(
-                fecha_solicitud__year=year
-            ).count() + 1
+            count = Solicitud.objects.filter(creada_en__year=year).count() + 1
             self.numero_solicitud = f"SOL-{year}-{count:04d}"
         
+        # Lógica inicial de estado según rol
+        if not self.id: # Solo al crear
+            nivel = self.usuario.rol.nivel
+            if nivel == 1: # Funcionario
+                self.estado = 'pendiente_jefatura'
+            elif nivel == 2: # Jefatura
+                self.estado = 'pendiente_direccion'
+            elif nivel == 3: # Subdirección
+                self.estado = 'pendiente_direccion' # Lo aprueba otra subdirección o dirección
+            elif nivel == 4: # Dirección
+                self.estado = 'pendiente_direccion' # Lo aprueba una subdirección
+
         super().save(*args, **kwargs)
-    
-    def aprobar_jefatura(self, jefe, comentarios=''):
-        """Aprueba la solicitud por parte de la jefatura"""
-        self.aprobada_por_jefatura = True
-        self.jefatura_aprobador = jefe
-        self.fecha_aprobacion_jefatura = timezone.now()
-        self.comentarios_jefatura = comentarios
-        self.estado = 'pendiente_direccion'
+
+    # --- MÉTODOS DE FLUJO ---
+
+    def aprobar(self, aprobador, comentarios=''):
+        nivel_solicitante = self.usuario.rol.nivel
+        nivel_aprobador = aprobador.rol.nivel
+        if nivel_solicitante == 1:
+            if nivel_aprobador == 2:
+                self.estado = 'pendiente_direccion'
+                self.jefatura_aprobador = aprobador
+                self.fecha_aprobacion_jefatura = timezone.now()
+            elif nivel_aprobador >= 3:
+                self.estado = 'aprobada'
+                self.direccion_aprobador = aprobador
+                self.fecha_aprobacion_direccion = timezone.now()
+                self.usuario.actualizar_dias_disponibles(self.tipo, self.cantidad_dias, 'descontar')
+        elif nivel_solicitante == 2 and nivel_aprobador >= 3:
+            self.estado = 'aprobada'
+            self.direccion_aprobador = aprobador
+            self.fecha_aprobacion_direccion = timezone.now()
+            self.usuario.actualizar_dias_disponibles(self.tipo, self.cantidad_dias, 'descontar')
+        elif nivel_solicitante == 3 and nivel_aprobador >= 3 and aprobador != self.usuario:
+            self.estado = 'aprobada'
+            self.direccion_aprobador = aprobador
+            self.fecha_aprobacion_direccion = timezone.now()
+            self.usuario.actualizar_dias_disponibles(self.tipo, self.cantidad_dias, 'descontar')
+        elif nivel_solicitante == 4 and nivel_aprobador == 3:
+            self.estado = 'aprobada'
+            self.direccion_aprobador = aprobador
+            self.fecha_aprobacion_direccion = timezone.now()
+            self.usuario.actualizar_dias_disponibles(self.tipo, self.cantidad_dias, 'descontar')
+        self.comentarios_administracion = comentarios
         self.save()
-    
-    def rechazar_jefatura(self, jefe, comentarios=''):
-        """Rechaza la solicitud por parte de la jefatura"""
-        self.aprobada_por_jefatura = False
-        self.jefatura_aprobador = jefe
-        self.fecha_aprobacion_jefatura = timezone.now()
-        self.comentarios_jefatura = comentarios
-        self.estado = 'rechazada_jefatura'
-        self.save()
-    
-    def aprobar_direccion(self, director, comentarios=''):
-        """Aprueba la solicitud por parte de dirección"""
-        self.aprobada_por_direccion = True
-        self.direccion_aprobador = director
-        self.fecha_aprobacion_direccion = timezone.now()
-        self.comentarios_direccion = comentarios
-        self.estado = 'aprobada'
-        
-        # Actualizar días disponibles del usuario
-        self.usuario.actualizar_dias_disponibles()
-        self.save()
-    
-    def rechazar_direccion(self, director, comentarios=''):
-        """Rechaza la solicitud por parte de dirección"""
-        self.aprobada_por_direccion = False
-        self.direccion_aprobador = director
-        self.fecha_aprobacion_direccion = timezone.now()
-        self.comentarios_direccion = comentarios
-        self.estado = 'rechazada_direccion'
-        self.save()
+
+    def anular_por_usuario(self):
+        """El usuario anula su propia solicitud si está pendiente"""
+        if 'pendiente' in self.estado:
+            self.estado = 'anulada_usuario'
+            self.save()
+
+    def solicitar_anulacion_licencia(self):
+        """El usuario pide anular una aprobada porque tiene licencia"""
+        if self.estado == 'aprobada':
+            self.estado = 'solicitud_anulacion_licencia'
+            self.save()
+
 
 
 # ======================================================
