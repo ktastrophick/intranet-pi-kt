@@ -13,7 +13,7 @@ from django.db.models import Q, Count
 from django.utils import timezone
 
 from .models import (
-    Usuario, Rol, Area, Solicitud,
+    Usuario, Rol, Area, Solicitud,TipoContrato,
     LicenciaMedica, Actividad, InscripcionActividad,
     Anuncio, AdjuntoAnuncio, Documento, CategoriaDocumento,
     Notificacion, LogAuditoria
@@ -21,7 +21,7 @@ from .models import (
 
 from .serializers import (
     UsuarioListSerializer, UsuarioDetailSerializer, UsuarioCreateSerializer,
-    RolSerializer, AreaSerializer,
+    RolSerializer, AreaSerializer, TipoContratoSerializer,
     SolicitudListSerializer, SolicitudDetailSerializer, SolicitudCreateSerializer,
     SolicitudAprobacionSerializer,
     LicenciaMedicaSerializer,
@@ -33,65 +33,55 @@ from .serializers import (
 )
 
 
+
+# ======================================================
+# TIPO CONTRATO VIEWSET
+# ======================================================
+
+class TipoContratoViewSet(viewsets.ModelViewSet):
+    """Gestión de tipos de contrato (Dirección/Subdirección)"""
+    queryset = TipoContrato.objects.all()
+    serializer_class = TipoContratoSerializer
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        if request.user.rol.nivel < 3:
+            return Response({'error': 'No tiene permisos'}, status=status.HTTP_403_FORBIDDEN)
+        return super().create(request, *args, **kwargs)
+
+
 # ======================================================
 # USUARIO VIEWSET
 # ======================================================
 
 class UsuarioViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para gestión de usuarios
-    """
-    queryset = Usuario.objects.select_related('rol', 'area').all()
-    serializer_class = UsuarioDetailSerializer  # ← Usar el serializer completo
+    """Gestión de usuarios y sus saldos de días"""
+    queryset = Usuario.objects.select_related('rol', 'area', 'tipo_contrato').all()
+    serializer_class = UsuarioDetailSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['area', 'rol', 'is_active', 'es_jefe_de_area']
     search_fields = ['nombre', 'apellido_paterno', 'apellido_materno', 'rut', 'email']
-    ordering_fields = ['apellido_paterno', 'nombre', 'fecha_ingreso']
-    ordering = ['apellido_paterno', 'apellido_materno', 'nombre']
+    ordering = ['apellido_paterno', 'nombre']
     
     def get_serializer_class(self):
-        if self.action == 'list':
-            return UsuarioListSerializer
-        elif self.action == 'create':
-            return UsuarioCreateSerializer
+        if self.action == 'list': return UsuarioListSerializer
+        if self.action == 'create': return UsuarioCreateSerializer
         return UsuarioDetailSerializer
     
     @action(detail=True, methods=['get'])
     def dias_disponibles(self, request, pk=None):
-        """Obtener días disponibles del usuario"""
+        """Resumen de bolsas de tiempo"""
         usuario = self.get_object()
         return Response({
-            'vacaciones': {
-                'total_anuales': usuario.dias_vacaciones_anuales,
-                'disponibles': usuario.dias_vacaciones_disponibles,
-                'usados': usuario.dias_vacaciones_usados,
-                'porcentaje_usado': (usuario.dias_vacaciones_usados / usuario.dias_vacaciones_anuales * 100) 
-                    if usuario.dias_vacaciones_anuales > 0 else 0
-            },
-            'administrativos': {
-                'total_anuales': usuario.dias_administrativos_anuales,
-                'disponibles': usuario.dias_administrativos_disponibles,
-                'usados': usuario.dias_administrativos_usados,
-                'porcentaje_usado': (usuario.dias_administrativos_usados / usuario.dias_administrativos_anuales * 100) 
-                    if usuario.dias_administrativos_anuales > 0 else 0
-            }
-        })
-    
-    @action(detail=True, methods=['post'])
-    def actualizar_dias(self, request, pk=None):
-        """Recalcular días disponibles del usuario"""
-        usuario = self.get_object()
-        usuario.actualizar_dias_disponibles()
-        return Response({
-            'message': 'Días actualizados correctamente',
-            'vacaciones_disponibles': usuario.dias_vacaciones_disponibles,
-            'administrativos_disponibles': usuario.dias_administrativos_disponibles
+            'vacaciones': usuario.dias_vacaciones_disponibles,
+            'administrativos': usuario.dias_administrativos_disponibles,
+            'sin_goce': usuario.dias_sin_goce_acumulados,
+            'devolucion': usuario.horas_devolucion_disponibles
         })
     
     @action(detail=False, methods=['get'])
     def me(self, request):
-        """Obtener información del usuario actual"""
         serializer = UsuarioDetailSerializer(request.user)
         return Response(serializer.data)
 
@@ -113,21 +103,12 @@ class RolViewSet(viewsets.ModelViewSet):
 # ======================================================
 
 class AreaViewSet(viewsets.ModelViewSet):
-    """ViewSet para gestión de áreas"""
     queryset = Area.objects.select_related('jefe').all()
     serializer_class = AreaSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter]
     search_fields = ['nombre', 'codigo']
     ordering = ['nombre']
-    
-    @action(detail=True, methods=['get'])
-    def funcionarios(self, request, pk=None):
-        """Listar funcionarios del área"""
-        area = self.get_object()
-        funcionarios = area.funcionarios.all()
-        serializer = UsuarioListSerializer(funcionarios, many=True)
-        return Response(serializer.data)
 
 
 # ======================================================
@@ -135,222 +116,81 @@ class AreaViewSet(viewsets.ModelViewSet):
 # ======================================================
 
 class SolicitudViewSet(viewsets.ModelViewSet):
-    """ViewSet para gestión de solicitudes"""
+    """Flujo de aprobación y anulación de solicitudes"""
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['tipo', 'estado', 'usuario__area']
     search_fields = ['numero_solicitud', 'usuario__nombre', 'usuario__rut']
-    ordering_fields = ['fecha_solicitud', 'fecha_inicio']
-    ordering = ['-fecha_solicitud']
     
     def get_queryset(self):
         user = self.request.user
-        
-        # Si es dirección o subdirección, ve todas
-        if user.rol.nivel >= 3:
-            return Solicitud.objects.select_related('usuario', 'usuario__area').all()
-        
-        # Si es jefatura, ve las de su área
-        elif user.rol.nivel == 2:
-            return Solicitud.objects.filter(usuario__area=user.area).select_related('usuario', 'usuario__area')
-        
-        # Funcionario ve solo las suyas
-        else:
-            return Solicitud.objects.filter(usuario=user).select_related('usuario', 'usuario__area')
-    
+        if user.rol.nivel >= 3: return Solicitud.objects.all()
+        if user.rol.nivel == 2: return Solicitud.objects.filter(usuario__area=user.area)
+        return Solicitud.objects.filter(usuario=user)
+
     def get_serializer_class(self):
-        if self.action == 'list':
-            return SolicitudListSerializer
-        elif self.action == 'create':
-            return SolicitudCreateSerializer
+        if self.action == 'list': return SolicitudListSerializer
+        if self.action == 'create': return SolicitudCreateSerializer
         return SolicitudDetailSerializer
     
     def perform_create(self, serializer):
-        """Crear solicitud asociándola al usuario actual"""
         serializer.save(usuario=self.request.user)
-    
+
     @action(detail=True, methods=['post'])
     def aprobar_jefatura(self, request, pk=None):
-        """Aprobar solicitud como jefatura"""
         solicitud = self.get_object()
-        user = request.user
-        
-        # Verificar permisos
-        if not user.puede_aprobar_solicitud(solicitud):
-            return Response(
-                {'error': 'No tienes permisos para aprobar esta solicitud'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Validar estado
-        if solicitud.estado != 'pendiente_jefatura':
-            return Response(
-                {'error': 'Esta solicitud no está en estado pendiente de jefatura'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        if request.user.rol.nivel < 2: return Response(status=403)
         
         serializer = SolicitudAprobacionSerializer(data=request.data)
         if serializer.is_valid():
             if serializer.validated_data['aprobar']:
-                solicitud.aprobar_jefatura(
-                    jefe=user,
-                    comentarios=serializer.validated_data.get('comentarios', '')
-                )
-                return Response({
-                    'message': 'Solicitud aprobada por jefatura',
-                    'nuevo_estado': solicitud.estado
-                })
+                solicitud.aprobar(aprobador=request.user, comentarios=serializer.validated_data.get('comentarios', ''))
             else:
-                solicitud.rechazar_jefatura(
-                    jefe=user,
-                    comentarios=serializer.validated_data.get('comentarios', '')
-                )
-                return Response({
-                    'message': 'Solicitud rechazada por jefatura',
-                    'nuevo_estado': solicitud.estado
-                })
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+                solicitud.estado = 'rechazada'
+                solicitud.comentarios_administracion = serializer.validated_data.get('comentarios', '')
+                solicitud.save()
+            return Response({'status': 'procesado'})
+        return Response(serializer.errors, status=400)
+
     @action(detail=True, methods=['post'])
     def aprobar_direccion(self, request, pk=None):
-        """Aprobar solicitud como dirección"""
         solicitud = self.get_object()
-        user = request.user
-        
-        # Verificar permisos (solo nivel 3 y 4)
-        if user.rol.nivel < 3:
-            return Response(
-                {'error': 'No tienes permisos para aprobar esta solicitud'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Validar estado
-        if solicitud.estado != 'pendiente_direccion':
-            return Response(
-                {'error': 'Esta solicitud no está en estado pendiente de dirección'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
+        if request.user.rol.nivel < 3: return Response(status=403)
+
         serializer = SolicitudAprobacionSerializer(data=request.data)
         if serializer.is_valid():
             if serializer.validated_data['aprobar']:
-                solicitud.aprobar_direccion(
-                    director=user,
-                    comentarios=serializer.validated_data.get('comentarios', '')
-                )
-                return Response({
-                    'message': 'Solicitud aprobada completamente',
-                    'nuevo_estado': solicitud.estado,
-                    'dias_actualizados': True
-                })
+                solicitud.aprobar(aprobador=request.user, comentarios=serializer.validated_data.get('comentarios', ''))
             else:
-                solicitud.rechazar_direccion(
-                    director=user,
-                    comentarios=serializer.validated_data.get('comentarios', '')
-                )
-                return Response({
-                    'message': 'Solicitud rechazada por dirección',
-                    'nuevo_estado': solicitud.estado
-                })
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=False, methods=['get'])
-    def pendientes(self, request):
-        """Listar solicitudes pendientes de aprobación"""
-        user = request.user
-        
-        if user.rol.nivel == 2:  # Jefatura
-            solicitudes = Solicitud.objects.filter(
-                usuario__area=user.area,
-                estado='pendiente_jefatura'
-            )
-        elif user.rol.nivel >= 3:  # Dirección/Subdirección
-            solicitudes = Solicitud.objects.filter(
-                estado__in=['pendiente_jefatura', 'pendiente_direccion']
-            )
-        else:
-            solicitudes = Solicitud.objects.none()
-        
-        serializer = SolicitudListSerializer(solicitudes, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['get'])
-    def mis_aprobaciones(self, request):
-        """Listar solicitudes que YO aprobé o rechacé"""
-        user = request.user
-        
-        if user.rol.nivel < 2:
-            return Response(
-                {'error': 'No tienes permisos para ver este historial'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Buscar donde el usuario aprobó/rechazó
-        solicitudes = Solicitud.objects.filter(
-            Q(jefatura_aprobador=user) | Q(direccion_aprobador=user)
-        ).select_related('usuario', 'usuario__area', 'jefatura_aprobador', 'direccion_aprobador')
-        
-        serializer = SolicitudListSerializer(solicitudes, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['get'])
-    def historial_completo(self, request):
-        """Listar TODAS las solicitudes aprobadas/rechazadas (solo Dirección/Subdirección)"""
-        user = request.user
-        
-        if user.rol.nivel < 3:
-            return Response(
-                {'error': 'Solo Dirección y Subdirección pueden ver el historial completo'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Todas las solicitudes que NO estén pendientes
-        solicitudes = Solicitud.objects.exclude(
-            estado__in=['pendiente_jefatura', 'pendiente_direccion']
-        ).select_related('usuario', 'usuario__area')
-        
-        serializer = SolicitudListSerializer(solicitudes, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['get'])
-    def mis_solicitudes(self, request):
-        """Listar solicitudes del usuario actual"""
-        solicitudes = Solicitud.objects.filter(usuario=request.user)
-        serializer = SolicitudListSerializer(solicitudes, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=True, methods=['get'])
-    def descargar_pdf(self, request, pk=None):
-        """Descargar PDF de solicitud aprobada"""
-        from django.http import HttpResponse
-        from .pdf_generator import generar_pdf_solicitud
-        
+                solicitud.estado = 'rechazada'
+                solicitud.comentarios_administracion = serializer.validated_data.get('comentarios', '')
+                solicitud.save()
+            return Response({'status': 'procesado'})
+        return Response(serializer.errors, status=400)
+
+    @action(detail=True, methods=['post'])
+    def anular_usuario(self, request, pk=None):
         solicitud = self.get_object()
-        
-        # Verificar que la solicitud esté completamente aprobada
-        if solicitud.estado != 'aprobada':
-            return Response(
-                {'error': 'Solo se puede descargar el PDF de solicitudes aprobadas'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Verificar que el usuario tenga permiso para descargar este PDF
-        # El usuario puede descargar su propia solicitud, o si tiene permisos de jefatura/dirección
-        if solicitud.usuario != request.user and not request.user.puede_aprobar_solicitud(solicitud):
-            return Response(
-                {'error': 'No tienes permisos para descargar este PDF'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Generar el PDF
-        pdf_buffer = generar_pdf_solicitud(solicitud)
-        
-        # Preparar la respuesta HTTP
-        response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
-        filename = f"solicitud_{solicitud.numero_solicitud}.pdf"
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
-        return response
+        if solicitud.usuario != request.user: return Response(status=403)
+        solicitud.anular_por_usuario()
+        return Response({'status': 'anulada'})
+
+    @action(detail=True, methods=['post'])
+    def solicitar_anulacion_licencia(self, request, pk=None):
+        solicitud = self.get_object()
+        if solicitud.usuario != request.user: return Response(status=403)
+        solicitud.solicitar_anulacion_licencia()
+        return Response({'status': 'solicitada'})
+
+    @action(detail=True, methods=['post'])
+    def finalizar_anulacion_licencia(self, request, pk=None):
+        """Dirección confirma anulación. Restitución de días es manual en Perfil Usuario."""
+        solicitud = self.get_object()
+        if request.user.rol.nivel < 3: return Response(status=403)
+        solicitud.estado = 'anulada_por_licencia'
+        solicitud.save()
+        return Response({'message': 'Solicitud anulada por licencia. Ajuste los días manualmente.'})
+
 
 
 # ======================================================
@@ -361,146 +201,33 @@ class SolicitudViewSet(viewsets.ModelViewSet):
 
 
 class LicenciaMedicaViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para la gestión de licencias médicas.
-    Soporta:
-    - Funcionarios: Ver sus propias licencias.
-    - Jefaturas: Ver sus licencias y el historial de aprobados de su área.
-    - Subdirección/Dirección: Gestión total y auditoría global.
-    """
+    queryset = LicenciaMedica.objects.select_related('usuario', 'revisada_por').all()
     serializer_class = LicenciaMedicaSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['estado', 'usuario__area']
-    search_fields = ['numero_licencia', 'usuario__nombre', 'usuario__rut']
-    ordering_fields = ['fecha_inicio', 'creado_en']
-    ordering = ['-creado_en']
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
-        # Optimización de consultas
-        qs = LicenciaMedica.objects.select_related('usuario', 'usuario__area', 'revisada_por')
-        
-        if user.rol.nivel >= 3: 
-            # Dirección (4) y Subdirección (3) ven absolutamente todo
-            return qs.all()
-        elif user.rol.nivel == 2: 
-            # Jefatura (2) ve las suyas y las de su área para historial
-            return qs.filter(Q(usuario=user) | Q(usuario__area=user.area))
-        else: 
-            # Funcionario (1) solo ve las propias
-            return qs.filter(usuario=user)
+        # Dirección/Subdir ven todo
+        if user.rol.nivel >= 3: return self.queryset
+        # Jefatura ve su área
+        if user.rol.nivel == 2: return self.queryset.filter(usuario__area=user.area)
+        # Funcionario solo lo suyo
+        return self.queryset.filter(usuario=user)
 
     def perform_create(self, serializer):
-        """Asigna automáticamente el usuario que sube el documento"""
         serializer.save(usuario=self.request.user)
 
-    # --- ACCIÓN DE GESTIÓN (REVISORES: NIVEL 3 Y 4) ---
-
-    @action(detail=True, methods=['post'], url_path='gestionar-licencia')
+    @action(detail=True, methods=['post'])
     def gestionar(self, request, pk=None):
-        """
-        Acción para aprobar o rechazar licencias.
-        Accesible para Subdirección (3) y Dirección (4).
-        """
         licencia = self.get_object()
-        user = request.user
-
-        if user.rol.nivel < 3:
-            return Response({"error": "No tiene permisos para gestionar licencias."}, status=403)
-
-        nuevo_estado = request.data.get('nuevo_estado')
-        comentarios = request.data.get('comentarios', '')
-
-        try:
-            if nuevo_estado == 'aprobada':
-                licencia.aprobar(revisor=user, comentarios=comentarios)
-            elif nuevo_estado == 'rechazada':
-                licencia.rechazar(revisor=user, comentarios=comentarios)
-            else:
-                return Response({"error": "Estado no válido. Use 'aprobada' o 'rechazada'."}, status=400)
-            
-            return Response({
-                "status": f"Licencia {nuevo_estado} correctamente",
-                "revisor": user.get_nombre_completo()
-            })
-        except ValueError as e:
-            return Response({"error": str(e)}, status=400)
-
-    # --- BANDEJAS ADMINISTRATIVAS (NIVEL >= 3) ---
-
-    @action(detail=False, methods=['get'])
-    def pendientes(self, request):
-        """Bandeja de entrada para licencias por revisar"""
-        if request.user.rol.nivel < 3:
-            return Response({"error": "No autorizado"}, status=403)
+        if request.user.rol.nivel < 3: return Response(status=403)
         
-        licencias = self.get_queryset().filter(estado='pendiente')
-        serializer = self.get_serializer(licencias, many=True)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['get'])
-    def mis_revisiones(self, request):
-        """Historial de licencias gestionadas por el usuario actual (admin)"""
-        if request.user.rol.nivel < 3:
-            return Response({"error": "No autorizado"}, status=403)
-            
-        licencias = self.get_queryset().filter(revisada_por=request.user)
-        serializer = self.get_serializer(licencias, many=True)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['get'])
-    def historial_completo(self, request):
-        """Visibilidad de todas las licencias ya procesadas en el sistema"""
-        if request.user.rol.nivel < 3:
-            return Response({"error": "No autorizado"}, status=403)
-        
-        licencias = self.get_queryset().exclude(estado='pendiente')
-        serializer = self.get_serializer(licencias, many=True)
-        return Response(serializer.data)
-
-    # --- VISTAS PARA JEFATURAS (NIVEL 2) ---
-
-    @action(detail=False, methods=['get'])
-    def historial_area(self, request):
-        """
-        Permite a la Jefatura ver las licencias APROBADAS de su área.
-        No incluye las pendientes por privacidad y flujo de trabajo.
-        """
-        user = request.user
-        if user.rol.nivel < 2:
-            return Response({"error": "No autorizado. Solo para Jefaturas o superior."}, status=403)
-            
-        # Filtramos por área del jefe y estado aprobada. 
-        # Excluimos al propio jefe para que no vea su propia licencia duplicada en esta lista.
-        licencias = LicenciaMedica.objects.filter(
-            usuario__area=user.area,
-            estado='aprobada'
-        ).exclude(usuario=user).select_related('usuario')
-        
-        serializer = self.get_serializer(licencias, many=True)
-        return Response(serializer.data)
-
-    # --- VISTAS PARA EL FUNCIONARIO (TODOS) ---
-
-    @action(detail=False, methods=['get'])
-    def mis_licencias(self, request):
-        """Historial personal: todas mis licencias (pendientes, aprobadas, rechazadas)"""
-        licencias = LicenciaMedica.objects.filter(usuario=request.user).order_by('-creado_en')
-        serializer = self.get_serializer(licencias, many=True)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['get'])
-    def vigentes(self, request):
-        """Dashboard: Licencias que están transcurriendo en la fecha actual"""
-        hoy = timezone.now().date()
-        # Si es admin ve todas las vigentes, si es jefe las de su área, si es funcionario la suya.
-        licencias = self.get_queryset().filter(
-            estado='aprobada',
-            fecha_inicio__lte=hoy,
-            fecha_termino__gte=hoy
-        )
-        serializer = self.get_serializer(licencias, many=True)
-        return Response(serializer.data)
+        estado = request.data.get('nuevo_estado')
+        if estado == 'aprobada':
+            licencia.aprobar(revisor=request.user, comentarios=request.data.get('comentarios', ''))
+        elif estado == 'rechazada':
+            licencia.rechazar(revisor=request.user, comentarios=request.data.get('comentarios', ''))
+        return Response({'status': estado})
 
 
 # ======================================================
