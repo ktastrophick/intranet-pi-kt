@@ -56,8 +56,7 @@ export function usePermissions(): Permisos {
   }
 
   // Obtener datos del rol desde el backend
-  // Estos campos vienen del modelo Rol en el backend
-  const nivel = user.rol_nivel || 1; // Asumir funcionario si no está definido
+  const nivel = user.rol_nivel || 1; 
   
   const esDirector = nivel === 4;
   const esSubdirector = nivel === 3;
@@ -71,8 +70,7 @@ export function usePermissions(): Permisos {
     esJefatura,
     esFuncionario,
     
-    // Permisos específicos del backend
-    // Estos vienen del modelo Rol
+    // Permisos específicos del backend extraídos del usuario logueado
     puedeCrearUsuarios: user.rol_puede_crear_usuarios || false,
     puedeEliminarContenido: user.rol_puede_eliminar_contenido || false,
     puedeAprobarSolicitudes: user.rol_puede_aprobar_solicitudes || false,
@@ -82,27 +80,31 @@ export function usePermissions(): Permisos {
     puedeVerReportes: user.rol_puede_ver_reportes || false,
     puedeEditarCalendario: user.rol_puede_editar_calendario || false,
     
-    // Solo Subdirección puede gestionar licencias médicas
-    // Dirección NO puede gestionar licencias
-    puedeGestionarLicencias: esSubdirector, 
+    // MODIFICACIÓN: Ahora tanto Dirección (4) como Subdirección (3) 
+    // pueden gestionar licencias médicas según los nuevos requerimientos.
+    puedeGestionarLicencias: nivel >= 3, 
 
 
     // Funciones de utilidad
     puedeAprobarSolicitud: (solicitudAreaId: string) => {
-      if (esDirector || esSubdirector) return true;
+      // Dirección y Subdirección aprueban todo
+      if (nivel >= 3) return true;
+      // Jefatura solo aprueba lo de su área
       if (esJefatura) return solicitudAreaId === user.area;
       return false;
     },
     
     puedeEditarContenido: (creadorId: string) => {
       // Dirección y Subdirección pueden editar cualquier contenido
-      if (esDirector || esSubdirector) return true;
+      if (nivel >= 3) return true;
       // El creador siempre puede editar su propio contenido
       return creadorId === user.id;
     },
     
     puedeVerContenidoDeArea: (areaId: string) => {
-      if (esDirector || esSubdirector) return true;
+      // Dirección y Subdirección tienen visibilidad global
+      if (nivel >= 3) return true;
+      // Otros usuarios solo ven su área
       return areaId === user.area;
     },
   };

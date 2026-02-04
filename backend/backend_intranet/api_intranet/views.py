@@ -359,10 +359,14 @@ class SolicitudViewSet(viewsets.ModelViewSet):
 
 # Ubicación: api_intranet/views.py
 
+
 class LicenciaMedicaViewSet(viewsets.ModelViewSet):
     """
     ViewSet para la gestión de licencias médicas.
-    Implementa lógica de bandejas para Subdirección y flujo de aprobación robusto.
+    Soporta:
+    - Funcionarios: Ver sus propias licencias.
+    - Jefaturas: Ver sus licencias y el historial de aprobados de su área.
+    - Subdirección/Dirección: Gestión total y auditoría global.
     """
     serializer_class = LicenciaMedicaSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -373,27 +377,30 @@ class LicenciaMedicaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        # Optimizamos la consulta con select_related
+        # Optimización de consultas
         qs = LicenciaMedica.objects.select_related('usuario', 'usuario__area', 'revisada_por')
         
-        if user.rol.nivel >= 3: # Dirección y Subdirección
+        if user.rol.nivel >= 3: 
+            # Dirección (4) y Subdirección (3) ven absolutamente todo
             return qs.all()
-        elif user.rol.nivel == 2: # Jefatura
-            return qs.filter(usuario__area=user.area)
-        else: # Funcionario
+        elif user.rol.nivel == 2: 
+            # Jefatura (2) ve las suyas y las de su área para historial
+            return qs.filter(Q(usuario=user) | Q(usuario__area=user.area))
+        else: 
+            # Funcionario (1) solo ve las propias
             return qs.filter(usuario=user)
 
     def perform_create(self, serializer):
-        """Al subir una licencia, se asigna automáticamente el usuario actual"""
+        """Asigna automáticamente el usuario que sube el documento"""
         serializer.save(usuario=self.request.user)
 
-    # --- ACCIÓN DE GESTIÓN (APROBAR/RECHAZAR) ---
+    # --- ACCIÓN DE GESTIÓN (REVISORES: NIVEL 3 Y 4) ---
 
     @action(detail=True, methods=['post'], url_path='gestionar-licencia')
     def gestionar(self, request, pk=None):
         """
-        Acción para que Subdirección gestione la licencia.
-        Usa los nuevos métodos del modelo para asegurar la auditoría.
+        Acción para aprobar o rechazar licencias.
+        Accesible para Subdirección (3) y Dirección (4).
         """
         licencia = self.get_object()
         user = request.user
@@ -419,11 +426,11 @@ class LicenciaMedicaViewSet(viewsets.ModelViewSet):
         except ValueError as e:
             return Response({"error": str(e)}, status=400)
 
-    # --- BANDEJAS DE ENTRADA (Filtros para LicenciasAdminPage) ---
+    # --- BANDEJAS ADMINISTRATIVAS (NIVEL >= 3) ---
 
     @action(detail=False, methods=['get'])
     def pendientes(self, request):
-        """Muestra solo lo que está esperando revisión"""
+        """Bandeja de entrada para licencias por revisar"""
         if request.user.rol.nivel < 3:
             return Response({"error": "No autorizado"}, status=403)
         
@@ -433,39 +440,60 @@ class LicenciaMedicaViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def mis_revisiones(self, request):
-        """Muestra las licencias que YO he gestionado (incluye las mías de cualquier estado)"""
+        """Historial de licencias gestionadas por el usuario actual (admin)"""
         if request.user.rol.nivel < 3:
             return Response({"error": "No autorizado"}, status=403)
             
-        # Filtramos por el revisor actual
         licencias = self.get_queryset().filter(revisada_por=request.user)
         serializer = self.get_serializer(licencias, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def historial_completo(self, request):
-        """Muestra todas las licencias que ya fueron procesadas por cualquier administrador"""
+        """Visibilidad de todas las licencias ya procesadas en el sistema"""
         if request.user.rol.nivel < 3:
             return Response({"error": "No autorizado"}, status=403)
         
-        # Todo lo que NO sea pendiente es historial
         licencias = self.get_queryset().exclude(estado='pendiente')
         serializer = self.get_serializer(licencias, many=True)
         return Response(serializer.data)
 
-    # --- VISTAS PARA EL FUNCIONARIO ---
+    # --- VISTAS PARA JEFATURAS (NIVEL 2) ---
+
+    @action(detail=False, methods=['get'])
+    def historial_area(self, request):
+        """
+        Permite a la Jefatura ver las licencias APROBADAS de su área.
+        No incluye las pendientes por privacidad y flujo de trabajo.
+        """
+        user = request.user
+        if user.rol.nivel < 2:
+            return Response({"error": "No autorizado. Solo para Jefaturas o superior."}, status=403)
+            
+        # Filtramos por área del jefe y estado aprobada. 
+        # Excluimos al propio jefe para que no vea su propia licencia duplicada en esta lista.
+        licencias = LicenciaMedica.objects.filter(
+            usuario__area=user.area,
+            estado='aprobada'
+        ).exclude(usuario=user).select_related('usuario')
+        
+        serializer = self.get_serializer(licencias, many=True)
+        return Response(serializer.data)
+
+    # --- VISTAS PARA EL FUNCIONARIO (TODOS) ---
 
     @action(detail=False, methods=['get'])
     def mis_licencias(self, request):
-        """Historial personal del funcionario logueado"""
-        licencias = LicenciaMedica.objects.filter(usuario=request.user)
+        """Historial personal: todas mis licencias (pendientes, aprobadas, rechazadas)"""
+        licencias = LicenciaMedica.objects.filter(usuario=request.user).order_by('-creado_en')
         serializer = self.get_serializer(licencias, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def vigentes(self, request):
-        """Licencias que están transcurriendo hoy (útil para dashboards)"""
+        """Dashboard: Licencias que están transcurriendo en la fecha actual"""
         hoy = timezone.now().date()
+        # Si es admin ve todas las vigentes, si es jefe las de su área, si es funcionario la suya.
         licencias = self.get_queryset().filter(
             estado='aprobada',
             fecha_inicio__lte=hoy,

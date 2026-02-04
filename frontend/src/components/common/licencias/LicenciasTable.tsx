@@ -9,18 +9,18 @@ import {
   Eye, 
   Download, 
   Trash2, 
-  Calendar, 
   User, 
   MessageSquare, 
-  ShieldCheck,
-  Clock
+  Clock,
+  Briefcase
 } from 'lucide-react';
 
 interface LicenciasTableProps {
   licencias: LicenciaMedica[];
   onView: (licencia: LicenciaMedica) => void;
   onDownload: (licencia: LicenciaMedica) => void;
-  onDelete: (licenciaId: string) => void;
+  onDelete?: (licenciaId: string) => void; // Ahora es opcional
+  showUserColumn?: boolean; // Nueva prop para identificar al funcionario
 }
 
 // Helpers locales para formateo
@@ -50,7 +50,8 @@ export const LicenciasTable: React.FC<LicenciasTableProps> = ({
   licencias,
   onView,
   onDownload,
-  onDelete
+  onDelete,
+  showUserColumn = false
 }) => {
   if (licencias.length === 0) return (
     <div className="text-center p-10 bg-gray-50 rounded-xl border-2 border-dashed">
@@ -62,7 +63,7 @@ export const LicenciasTable: React.FC<LicenciasTableProps> = ({
     <Card className="overflow-hidden shadow-xl border-0">
       <div className="bg-gradient-to-r from-gray-50 to-blue-50 px-6 py-4 border-b-2 border-gray-200">
         <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-          📋 Historial de Licencias Médicas
+          📋 {showUserColumn ? 'Historial del Área' : 'Mis Licencias Médicas'}
           <span className="text-sm font-normal text-gray-600">
             ({licencias.length} {licencias.length === 1 ? 'registro' : 'registros'})
           </span>
@@ -73,6 +74,9 @@ export const LicenciasTable: React.FC<LicenciasTableProps> = ({
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
+              {showUserColumn && (
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Funcionario</th>
+              )}
               <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Folio / Archivo</th>
               <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Período</th>
               <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Estado</th>
@@ -95,6 +99,26 @@ export const LicenciasTable: React.FC<LicenciasTableProps> = ({
 
               return (
                 <tr key={licencia.id} className="hover:bg-blue-50/40 transition-colors duration-150 group">
+                  
+                  {/* COLUMNA FUNCIONARIO (Condicional para Jefatura) */}
+                  {showUserColumn && (
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-cyan-100 p-1.5 rounded-md text-cyan-600">
+                          <User size={14} />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-gray-800 line-clamp-1">
+                            {licencia.usuario_nombre}
+                          </span>
+                          <span className="text-[10px] text-gray-500 italic">
+                            {licencia.area_nombre || 'Área Registrada'}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                  )}
+
                   {/* ARCHIVO */}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -174,20 +198,21 @@ export const LicenciasTable: React.FC<LicenciasTableProps> = ({
                         className="h-8 px-2 text-[#009DDC] hover:bg-blue-50 gap-1.5 text-[10px] font-bold"
                       >
                         <Eye className="w-3.5 h-3.5" />
-                        DETALLES
+                        VER
                       </Button>
                       
                       <div className="h-4 w-[1px] bg-gray-200 mx-1" />
 
                       <button 
                         onClick={() => onDownload(licencia)} 
-                        title="Descargar PDF"
+                        title="Ver Documento"
                         className="p-1.5 text-gray-400 hover:text-green-600 transition-colors"
                       >
                         <Download className="w-4 h-4" />
                       </button>
                       
-                      {licencia.estado !== 'aprobada' && (
+                      {/* ELIMINAR: Solo si se pasa la función onDelete y no está aprobada */}
+                      {onDelete && licencia.estado !== 'aprobada' && (
                         <button 
                           onClick={() => onDelete(licencia.id)} 
                           title="Eliminar registro"
