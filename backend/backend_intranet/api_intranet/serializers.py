@@ -6,7 +6,7 @@
 
 from rest_framework import serializers
 from .models import (
-    Usuario, Rol, Area, Solicitud,
+    Usuario, Rol, Area, Solicitud,TipoContrato,
     LicenciaMedica, Actividad, InscripcionActividad,
     Anuncio, AdjuntoAnuncio, Documento, CategoriaDocumento,
     Notificacion, LogAuditoria
@@ -16,6 +16,12 @@ from .models import (
 # ======================================================
 # SERIALIZERS SIMPLES (Sin relaciones complejas)
 # ======================================================
+
+class TipoContratoSerializer(serializers.ModelSerializer):
+    """Serializer para Tipo de Contrato"""
+    class Meta:
+        model = TipoContrato
+        fields = '__all__'
 
 class RolSerializer(serializers.ModelSerializer):
     """Serializer para Rol"""
@@ -79,14 +85,14 @@ class UsuarioListSerializer(serializers.ModelSerializer):
 
 
 class UsuarioDetailSerializer(serializers.ModelSerializer):
-    """Serializer completo del usuario con todos los campos"""
+    """Serializer completo del usuario con bolsas de tiempo y contrato"""
     
-    # Campos anidados de solo lectura
     rol_nombre = serializers.CharField(source='rol.nombre', read_only=True)
     area_nombre = serializers.CharField(source='area.nombre', read_only=True)
+    tipo_contrato_nombre = serializers.CharField(source='tipo_contrato.nombre', read_only=True)
     nombre_completo = serializers.CharField(source='get_nombre_completo', read_only=True)
     
-    # ✅ CAMPOS DEL ROL PARA PERMISOS
+    # Permisos del rol
     rol_nivel = serializers.IntegerField(source='rol.nivel', read_only=True)
     rol_puede_crear_usuarios = serializers.BooleanField(source='rol.puede_crear_usuarios', read_only=True)
     rol_puede_eliminar_contenido = serializers.BooleanField(source='rol.puede_eliminar_contenido', read_only=True)
@@ -101,49 +107,24 @@ class UsuarioDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
         fields = [
-            # Identificación
-            'id', 'rut',
-            
-            # Datos personales
-            'nombre', 'apellido_paterno', 'apellido_materno', 'nombre_completo',
+            'id', 'rut', 'nombre', 'apellido_paterno', 'apellido_materno', 'nombre_completo',
             'email', 'telefono', 'fecha_nacimiento', 'direccion',
-            
-            # Información profesional
             'cargo', 'area', 'area_nombre', 'rol', 'rol_nombre', 'fecha_ingreso',
-            'es_jefe_de_area',
+            'tipo_contrato', 'tipo_contrato_nombre', 'es_jefe_de_area',
             
-            # Contacto de emergencia
-            'contacto_emergencia_nombre',
-            'contacto_emergencia_telefono',
-            'contacto_emergencia_relacion',
-            
-            # Días disponibles
-            'dias_vacaciones_anuales',
+            # Bolsas de tiempo actualizadas
             'dias_vacaciones_disponibles',
-            'dias_vacaciones_usados',
-            'dias_administrativos_anuales',
             'dias_administrativos_disponibles',
-            'dias_administrativos_usados',
+            'dias_sin_goce_acumulados',
+            'horas_devolucion_disponibles',
             
-            # Avatar y preferencias
-            'avatar', 'tema_preferido',
-            
-            # Estado
-            'is_active',
-            
-            # Auditoría
+            'avatar', 'tema_preferido', 'is_active',
             'creado_en', 'actualizado_en', 'ultimo_acceso',
             
-            # ✅ PERMISOS DEL ROL
-            'rol_nivel',
-            'rol_puede_crear_usuarios',
-            'rol_puede_eliminar_contenido',
-            'rol_puede_aprobar_solicitudes',
-            'rol_puede_subir_documentos',
-            'rol_puede_crear_actividades',
-            'rol_puede_crear_anuncios',
-            'rol_puede_gestionar_licencias',
-            'rol_puede_ver_reportes',
+            'rol_nivel', 'rol_puede_crear_usuarios', 'rol_puede_eliminar_contenido',
+            'rol_puede_aprobar_solicitudes', 'rol_puede_subir_documentos',
+            'rol_puede_crear_actividades', 'rol_puede_crear_anuncios',
+            'rol_puede_gestionar_licencias', 'rol_puede_ver_reportes',
             'rol_puede_editar_calendario',
         ]
         read_only_fields = ['id', 'creado_en', 'actualizado_en']
@@ -151,7 +132,7 @@ class UsuarioDetailSerializer(serializers.ModelSerializer):
 
 
 class UsuarioCreateSerializer(serializers.ModelSerializer):
-    """Serializer para crear usuario"""
+    """Serializer para crear usuario con contrato obligatorio"""
     password = serializers.CharField(write_only=True, required=True)
     password_confirm = serializers.CharField(write_only=True, required=True)
     
@@ -161,8 +142,9 @@ class UsuarioCreateSerializer(serializers.ModelSerializer):
             'rut', 'nombre', 'apellido_paterno', 'apellido_materno',
             'email', 'password', 'password_confirm', 'telefono',
             'fecha_nacimiento', 'direccion', 'cargo', 'area', 'rol',
-            'fecha_ingreso', 'es_jefe_de_area',
-            'dias_vacaciones_anuales', 'dias_administrativos_anuales'
+            'tipo_contrato', 'fecha_ingreso', 'es_jefe_de_area',
+            'dias_vacaciones_disponibles', 'dias_administrativos_disponibles',
+            'horas_devolucion_disponibles'
         ]
     
     def validate(self, data):
@@ -184,179 +166,63 @@ class UsuarioCreateSerializer(serializers.ModelSerializer):
 # ======================================================
 
 class SolicitudListSerializer(serializers.ModelSerializer):
-    """Serializer para listado de solicitudes"""
+    """Serializer para listado de solicitudes con nuevos campos"""
     usuario_nombre = serializers.CharField(source='usuario.get_nombre_completo', read_only=True)
-    usuario_email = serializers.EmailField(source='usuario.email', read_only=True)
-    usuario_cargo = serializers.CharField(source='usuario.cargo', read_only=True)
     usuario_area = serializers.CharField(source='usuario.area.nombre', read_only=True)
-    area_nombre = serializers.CharField(source='usuario.area.nombre', read_only=True)
     tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
     
-    # Campos calculados para aprobador (retrocompatibilidad)
-    aprobador = serializers.SerializerMethodField()
-    aprobador_nombre = serializers.SerializerMethodField()
-    fecha_aprobacion = serializers.SerializerMethodField()
-    comentario_aprobacion = serializers.SerializerMethodField()
-    
-    # Campos separados para jefatura
-    jefatura_aprobador_nombre = serializers.SerializerMethodField()
-    jefatura_fecha_aprobacion = serializers.SerializerMethodField()
-    jefatura_comentarios = serializers.SerializerMethodField()
-    
-    # Campos separados para dirección
-    direccion_aprobador_nombre = serializers.SerializerMethodField()
-    direccion_fecha_aprobacion = serializers.SerializerMethodField()
-    direccion_comentarios = serializers.SerializerMethodField()
+    # Nombres de aprobadores
+    jefatura_aprobador_nombre = serializers.CharField(source='jefatura_aprobador.get_nombre_completo', read_only=True)
+    direccion_aprobador_nombre = serializers.CharField(source='direccion_aprobador.get_nombre_completo', read_only=True)
     
     class Meta:
         model = Solicitud
         fields = [
-            'id', 'numero_solicitud', 'usuario', 'usuario_nombre', 'usuario_email',
-            'usuario_cargo', 'usuario_area', 'area_nombre', 'tipo', 'tipo_display', 
+            'id', 'numero_solicitud', 'usuario', 'usuario_nombre', 'usuario_area',
+            'tipo', 'tipo_display', 'nombre_otro_permiso', 'es_medio_dia',
             'fecha_inicio', 'fecha_termino', 'cantidad_dias', 'motivo', 
             'telefono_contacto', 'estado', 'estado_display', 'fecha_solicitud',
             'pdf_generado', 'url_pdf', 'creada_en', 'actualizada_en',
-            'aprobador', 'aprobador_nombre', 'fecha_aprobacion', 'comentario_aprobacion',
-            'jefatura_aprobador_nombre', 'jefatura_fecha_aprobacion', 'jefatura_comentarios',
-            'direccion_aprobador_nombre', 'direccion_fecha_aprobacion', 'direccion_comentarios'
+            'jefatura_aprobador_nombre', 'fecha_aprobacion_jefatura',
+            'direccion_aprobador_nombre', 'fecha_aprobacion_direccion',
+            'comentarios_administracion'
         ]
         read_only_fields = ('id', 'numero_solicitud', 'fecha_solicitud', 'creada_en', 'actualizada_en')
-    
-    def get_aprobador(self, obj):
-        """Retorna el ID del aprobador (jefatura o dirección)"""
-        try:
-            if hasattr(obj, 'jefatura_aprobador') and obj.jefatura_aprobador:
-                return str(obj.jefatura_aprobador.id)
-            elif hasattr(obj, 'direccion_aprobador') and obj.direccion_aprobador:
-                return str(obj.direccion_aprobador.id)
-        except Exception:
-            pass
-        return None
-    
-    def get_aprobador_nombre(self, obj):
-        """Retorna el nombre del aprobador"""
-        try:
-            if hasattr(obj, 'jefatura_aprobador') and obj.jefatura_aprobador:
-                return obj.jefatura_aprobador.get_nombre_completo()
-            elif hasattr(obj, 'direccion_aprobador') and obj.direccion_aprobador:
-                return obj.direccion_aprobador.get_nombre_completo()
-        except Exception:
-            pass
-        return None
-    
-    def get_fecha_aprobacion(self, obj):
-        """Retorna la fecha de aprobación"""
-        try:
-            if hasattr(obj, 'fecha_aprobacion_jefatura') and obj.fecha_aprobacion_jefatura:
-                return obj.fecha_aprobacion_jefatura.isoformat()
-            elif hasattr(obj, 'fecha_aprobacion_direccion') and obj.fecha_aprobacion_direccion:
-                return obj.fecha_aprobacion_direccion.isoformat()
-        except Exception:
-            pass
-        return None
-    
-    def get_comentario_aprobacion(self, obj):
-        """Retorna los comentarios de aprobación"""
-        try:
-            if hasattr(obj, 'comentarios_jefatura') and obj.comentarios_jefatura:
-                return obj.comentarios_jefatura
-            elif hasattr(obj, 'comentarios_direccion') and obj.comentarios_direccion:
-                return obj.comentarios_direccion
-        except Exception:
-            pass
-        return None
-    
-    # Métodos para campos de jefatura
-    def get_jefatura_aprobador_nombre(self, obj):
-        """Retorna el nombre del aprobador de jefatura o None"""
-        try:
-            if hasattr(obj, 'jefatura_aprobador') and obj.jefatura_aprobador:
-                return obj.jefatura_aprobador.get_nombre_completo()
-        except Exception:
-            pass
-        return None
-    
-    def get_jefatura_fecha_aprobacion(self, obj):
-        """Retorna la fecha de aprobación de jefatura o None"""
-        try:
-            if hasattr(obj, 'fecha_aprobacion_jefatura') and obj.fecha_aprobacion_jefatura:
-                return obj.fecha_aprobacion_jefatura.isoformat()
-        except Exception:
-            pass
-        return None
-    
-    def get_jefatura_comentarios(self, obj):
-        """Retorna los comentarios de jefatura o None"""
-        try:
-            if hasattr(obj, 'comentarios_jefatura') and obj.comentarios_jefatura:
-                return obj.comentarios_jefatura
-        except Exception:
-            pass
-        return None
-    
-    # Métodos para campos de dirección
-    def get_direccion_aprobador_nombre(self, obj):
-        """Retorna el nombre del aprobador de dirección o None"""
-        try:
-            if hasattr(obj, 'direccion_aprobador') and obj.direccion_aprobador:
-                return obj.direccion_aprobador.get_nombre_completo()
-        except Exception:
-            pass
-        return None
-    
-    def get_direccion_fecha_aprobacion(self, obj):
-        """Retorna la fecha de aprobación de dirección o None"""
-        try:
-            if hasattr(obj, 'fecha_aprobacion_direccion') and obj.fecha_aprobacion_direccion:
-                return obj.fecha_aprobacion_direccion.isoformat()
-        except Exception:
-            pass
-        return None
-    
-    def get_direccion_comentarios(self, obj):
-        """Retorna los comentarios de dirección o None"""
-        try:
-            if hasattr(obj, 'comentarios_direccion') and obj.comentarios_direccion:
-                return obj.comentarios_direccion
-        except Exception:
-            pass
-        return None
 
 
 class SolicitudDetailSerializer(serializers.ModelSerializer):
     """Serializer completo para detalle de solicitud"""
     usuario_nombre = serializers.CharField(source='usuario.get_nombre_completo', read_only=True)
     area_nombre = serializers.CharField(source='usuario.area.nombre', read_only=True)
-    jefatura_nombre = serializers.CharField(source='jefatura_aprobador.get_nombre_completo', read_only=True)
-    direccion_nombre = serializers.CharField(source='direccion_aprobador.get_nombre_completo', read_only=True)
     tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
     
     class Meta:
         model = Solicitud
         fields = '__all__'
-        read_only_fields = (
-            'id', 'numero_solicitud', 'estado', 'fecha_solicitud',
-            'aprobada_por_jefatura', 'jefatura_aprobador', 'fecha_aprobacion_jefatura',
-            'aprobada_por_direccion', 'direccion_aprobador', 'fecha_aprobacion_direccion',
-            'pdf_generado', 'url_pdf', 'creada_en', 'actualizada_en'
-        )
 
 
 class SolicitudCreateSerializer(serializers.ModelSerializer):
-    """Serializer para crear solicitud"""
+    """Serializer para crear solicitud con validación de Otros Permisos"""
     class Meta:
         model = Solicitud
         fields = [
-            'tipo', 'fecha_inicio', 'fecha_termino',
-            'cantidad_dias', 'motivo', 'telefono_contacto'
+            'tipo', 'nombre_otro_permiso', 'fecha_inicio', 'fecha_termino',
+            'cantidad_dias', 'es_medio_dia', 'motivo', 'telefono_contacto'
         ]
     
     def validate(self, data):
-        # Validar fechas
+        # 1. Validar fechas
         if data['fecha_inicio'] > data['fecha_termino']:
-            raise serializers.ValidationError("La fecha de inicio debe ser anterior a la fecha de término")
+            raise serializers.ValidationError("La fecha de inicio debe ser anterior a la de término")
+        
+        # 2. Validar Nombre de otro permiso
+        if data.get('tipo') == 'otro_permiso' and not data.get('nombre_otro_permiso'):
+            raise serializers.ValidationError({
+                "nombre_otro_permiso": "Debe especificar el nombre del permiso si selecciona 'Otros Permisos'."
+            })
+            
         return data
 
 
@@ -365,83 +231,29 @@ class SolicitudAprobacionSerializer(serializers.Serializer):
     aprobar = serializers.BooleanField(required=True)
     comentarios = serializers.CharField(required=False, allow_blank=True)
 
-
 # ======================================================
 # LICENCIA MÉDICA SERIALIZER
 # ======================================================
 
 class LicenciaMedicaSerializer(serializers.ModelSerializer):
-    """Serializer actualizado para licencias médicas (Enfoque en Privacidad y Flujo)"""
-    
-    # Campos de solo lectura para información amigable
     usuario_nombre = serializers.CharField(source='usuario.get_nombre_completo', read_only=True)
-    usuario_rut = serializers.CharField(source='usuario.rut', read_only=True) # Útil para que la subdirectora identifique rápido
+    usuario_rut = serializers.CharField(source='usuario.rut', read_only=True)
     area_nombre = serializers.CharField(source='usuario.area.nombre', read_only=True)
-    
-    # Información del revisor
-    revisada_por_nombre = serializers.CharField(
-        source='revisada_por.get_nombre_completo', 
-        read_only=True, 
-        default="No revisada"
-    )
-    
-    # Texto legible del estado
+    revisada_por_nombre = serializers.CharField(source='revisada_por.get_nombre_completo', read_only=True, default="No revisada")
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
-    
-    # Nuevas propiedades del modelo
     esta_vigente = serializers.BooleanField(read_only=True)
-    dias_restantes = serializers.IntegerField(read_only=True) # Agregado para el frontend
+    dias_restantes = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = LicenciaMedica
         fields = [
-            'id', 
-            'numero_licencia', 
-            'usuario', 
-            'usuario_nombre', 
-            'usuario_rut', # Agregado
-            'area_nombre', 
-            'fecha_inicio', 
-            'fecha_termino', 
-            'dias_totales', 
-            'documento_licencia',
-            'estado', 
-            'estado_display', 
-            'revisada_por', 
-            'revisada_por_nombre',
-            'comentarios_revision', 
-            'fecha_revision', 
-            'creado_en', 
-            'actualizada_en',
-            'esta_vigente',
-            'dias_restantes' # Agregado
+            'id', 'numero_licencia', 'usuario', 'usuario_nombre', 'usuario_rut',
+            'area_nombre', 'fecha_inicio', 'fecha_termino', 'dias_totales', 
+            'documento_licencia', 'estado', 'estado_display', 'revisada_por', 
+            'revisada_por_nombre', 'comentarios_revision', 'fecha_revision', 
+            'creado_en', 'esta_vigente', 'dias_restantes'
         ]
-        
-        # Ajustamos los campos de solo lectura
-        read_only_fields = (
-            'id', 
-            'usuario', # El usuario se asigna automáticamente en el ViewSet
-            'dias_totales', 
-            'estado', 
-            'revisada_por', 
-            'fecha_revision', 
-            'creado_en', 
-            'actualizada_en'
-        )
-
-    def validate(self, data):
-        """Validaciones de integridad de datos"""
-        # 1. Validación de fechas (ya la tenías)
-        if data['fecha_inicio'] > data['fecha_termino']:
-            raise serializers.ValidationError({
-                "fecha_termino": "La fecha de término no puede ser anterior a la de inicio."
-            })
-            
-        # 2. Validación opcional: No permitir licencias con fecha de inicio 
-        # excesivamente en el pasado o futuro (opcional, según reglas del CESFAM)
-        # return data
-        
-        return data
+        read_only_fields = ('id', 'usuario', 'dias_totales', 'estado', 'revisada_por', 'fecha_revision', 'creado_en')
 
 
 # ======================================================
