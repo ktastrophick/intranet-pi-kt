@@ -112,7 +112,7 @@ class AreaViewSet(viewsets.ModelViewSet):
 
 
 # ======================================================
-# SOLICITUD VIEWSET
+# SOLICITUD VIEWSET - CORREGIDO
 # ======================================================
 
 class SolicitudViewSet(viewsets.ModelViewSet):
@@ -129,10 +129,24 @@ class SolicitudViewSet(viewsets.ModelViewSet):
         return Solicitud.objects.filter(usuario=user)
 
     def get_serializer_class(self):
-        if self.action == 'list': return SolicitudListSerializer
-        if self.action == 'create': return SolicitudCreateSerializer
+        # ✅ FIX: 'mis_solicitudes' ahora usa ListSerializer para enviar nombres de jefes en vez de IDs
+        if self.action in ['list', 'mis_solicitudes']: 
+            return SolicitudListSerializer
+        if self.action == 'create': 
+            return SolicitudCreateSerializer
         return SolicitudDetailSerializer
     
+    @action(detail=False, methods=['get'])
+    def mis_solicitudes(self, request):
+        """Endpoint: /api/solicitudes/mis_solicitudes/"""
+        # ✅ OPTIMIZACIÓN: select_related evita múltiples consultas a la DB para traer los nombres
+        solicitudes = Solicitud.objects.filter(usuario=request.user)\
+            .select_related('jefatura_aprobador', 'direccion_aprobador', 'usuario__area')\
+            .order_by('-creada_en')
+        
+        serializer = self.get_serializer(solicitudes, many=True)
+        return Response(serializer.data)
+
     def perform_create(self, serializer):
         serializer.save(usuario=self.request.user)
 
@@ -190,8 +204,6 @@ class SolicitudViewSet(viewsets.ModelViewSet):
         solicitud.estado = 'anulada_por_licencia'
         solicitud.save()
         return Response({'message': 'Solicitud anulada por licencia. Ajuste los días manualmente.'})
-
-
 
 # ======================================================
 # LICENCIA MÉDICA VIEWSET

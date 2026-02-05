@@ -165,7 +165,7 @@ class Command(BaseCommand):
                 'nombre': 'Lucía',
                 'apellido_paterno': 'Torres',
                 'apellido_materno': 'Ramírez',
-                'cargo': 'Enfermera Universitaria',
+                'cargo': 'Enfermera',
                 'area': areas_creadas['Enfermería'],
                 'rol': roles_creados['Funcionario'],
                 'tipo_contrato': contrato_contrata,
@@ -182,13 +182,13 @@ class Command(BaseCommand):
         
         # 4.4 Jefatura de Área (Enfermería) - MODIFICADO
         jefe_enfermeria, created = Usuario.objects.get_or_create(
-            rut='15.555.666-7',
+            rut='15.678.901-2',
             defaults={
                 'email': 'jefe.enfermeria@cesfam.cl',
                 'nombre': 'Ricardo',
                 'apellido_paterno': 'Soto',
                 'apellido_materno': 'Méndez',
-                'cargo': 'Enfermero Coordinador Jefe',
+                'cargo': 'Jefe de Enfermería',
                 'area': areas_creadas['Enfermería'],
                 'rol': roles_creados['Jefatura de Área'],
                 'tipo_contrato': contrato_planta,
