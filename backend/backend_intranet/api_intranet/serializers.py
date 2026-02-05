@@ -169,6 +169,8 @@ class SolicitudListSerializer(serializers.ModelSerializer):
     """Serializer para listado de solicitudes con nuevos campos"""
     usuario_nombre = serializers.CharField(source='usuario.get_nombre_completo', read_only=True)
     usuario_area = serializers.CharField(source='usuario.area.nombre', read_only=True)
+    # Agregamos usuario_cargo para que el frontend lo muestre correctamente
+    usuario_cargo = serializers.CharField(source='usuario.cargo', read_only=True)
     tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
     
@@ -179,22 +181,24 @@ class SolicitudListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Solicitud
         fields = [
-            'id', 'numero_solicitud', 'usuario', 'usuario_nombre', 'usuario_area',
+            'id', 'numero_solicitud', 'usuario', 'usuario_nombre', 'usuario_area', 'usuario_cargo',
             'tipo', 'tipo_display', 'nombre_otro_permiso', 'es_medio_dia',
             'fecha_inicio', 'fecha_termino', 'cantidad_dias', 'motivo', 
-            'telefono_contacto', 'estado', 'estado_display', 'fecha_solicitud',
+            'telefono_contacto', 'estado', 'estado_display',
             'pdf_generado', 'url_pdf', 'creada_en', 'actualizada_en',
             'jefatura_aprobador_nombre', 'fecha_aprobacion_jefatura',
             'direccion_aprobador_nombre', 'fecha_aprobacion_direccion',
             'comentarios_administracion'
         ]
-        read_only_fields = ('id', 'numero_solicitud', 'fecha_solicitud', 'creada_en', 'actualizada_en')
+        # Eliminado 'fecha_solicitud' de aquí también
+        read_only_fields = ('id', 'numero_solicitud', 'creada_en', 'actualizada_en')
 
 
 class SolicitudDetailSerializer(serializers.ModelSerializer):
     """Serializer completo para detalle de solicitud"""
     usuario_nombre = serializers.CharField(source='usuario.get_nombre_completo', read_only=True)
-    area_nombre = serializers.CharField(source='usuario.area.nombre', read_only=True)
+    usuario_area = serializers.CharField(source='usuario.area.nombre', read_only=True)
+    usuario_cargo = serializers.CharField(source='usuario.cargo', read_only=True)
     tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
     

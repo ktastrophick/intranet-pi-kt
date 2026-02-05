@@ -1,7 +1,4 @@
-// ======================================================
-// API INDEX - Exportaciones centralizadas
 // Ubicación: frontend/src/api/index.ts
-// ======================================================
 
 // Servicios de autenticación
 export { authService } from './services/authService';
@@ -10,25 +7,21 @@ export { authService } from './services/authService';
 export { usuarioService } from './services/usuarioService';
 export { rolService } from './services/rolService';
 export { areaService } from './services/areaService';
+export { tipoContratoService } from './services/tipoContratoService'; // Asegúrate que esté aquí
 
 // Servicios de solicitudes
 export { solicitudService } from './services/solicitudService';
 
-// TODO: Agregar cuando se implementen
-// export { documentoService } from './services/documentoService';
-// export { anuncioService } from './services/anuncioService';
-// export { actividadService } from './services/actividadService';
-// export { licenciaService } from './services/licenciaService';
-// export { notificacionService } from './services/notificacionService';
-
-// Re-exportar tipos comunes
+// Re-exportar tipos (Usando 'export type' para evitar errores de VerbatimModuleSyntax)
 export type { Usuario, CrearUsuarioDTO, ActualizarUsuarioDTO } from './services/usuarioService';
 export type { Rol, CrearRolDTO } from './services/rolService';
 export type { Area, CrearAreaDTO } from './services/areaService';
+export type { TipoContrato } from '@/types/usuario'; 
 export type { 
   Solicitud, 
   CrearSolicitudDTO, 
   TipoSolicitud, 
   EstadoSolicitud,
-  EstadisticasSolicitudes 
+  AprobarRechazarDTO // ✅ Agregado este que sí existe
+  // ❌ Eliminado EstadisticasSolicitudes porque no está definido en el servicio
 } from './services/solicitudService';

@@ -10,19 +10,17 @@ import { UnifiedNavbar } from '@/components/common/layout/UnifiedNavbar';
 import Footer from '@/components/common/layout/Footer';
 import BannerVacaciones from '@/components/images/banners_finales/BannerVacaciones';
 import { 
-  CalendarDays, Briefcase, Calendar, 
+  CalendarDays, Briefcase, 
   FileText, AlertCircle, Send,
   Clock, HelpCircle, MinusCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/common/multiusos/textarea';
 import { Checkbox } from "@/components/ui/checkbox";
 
 import { useAuth } from '@/api/contexts/AuthContext';
 import { solicitudService, usuarioService } from '@/api';
-// ✅ CORRECCIÓN 1: Importar tipo con 'import type'
 import type { TipoSolicitud } from '@/api/services/solicitudService';
 
 // ======================================================
@@ -36,17 +34,11 @@ interface SolicitudFormData {
   fechaTermino: string;
   cantidadDias: number; 
   esMedioDia: boolean;
-  motivo: string;
-  telefonoContacto: string;
 }
 
 interface FormErrors {
   [key: string]: string;
 }
-
-// ======================================================
-// COMPONENTE
-// ======================================================
 
 export const SolicitarDiasPage: React.FC = () => {
   const { user } = useAuth();
@@ -65,8 +57,6 @@ export const SolicitarDiasPage: React.FC = () => {
     fechaTermino: '',
     cantidadDias: 0,
     esMedioDia: false,
-    motivo: '',
-    telefonoContacto: user?.telefono || ''
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -81,7 +71,6 @@ export const SolicitarDiasPage: React.FC = () => {
 
   const cargarSaldos = async () => {
     try {
-      // ✅ CORRECCIÓN 2: Castear la respuesta para que coincida con el backend
       const data = await usuarioService.getDiasDisponibles(user!.id) as any;
       setBolsas({
         vacaciones: data.vacaciones || 0,
@@ -93,10 +82,6 @@ export const SolicitarDiasPage: React.FC = () => {
       console.error('Error al cargar saldos:', error);
     }
   };
-
-  // ======================================================
-  // LÓGICA DE NEGOCIO
-  // ======================================================
 
   const handleChange = (field: keyof SolicitudFormData, value: any) => {
     setFormData(prev => {
@@ -132,12 +117,12 @@ export const SolicitarDiasPage: React.FC = () => {
   const validarFormulario = (): boolean => {
     const newErrors: FormErrors = {};
     if (!formData.fechaInicio) newErrors.fechaInicio = 'Fecha de inicio requerida';
-    if (!formData.motivo || formData.motivo.length < 10) newErrors.motivo = 'Motivo demasiado corto (mín. 10 caracteres)';
     
     if (formData.tipoSolicitud === 'otro_permiso' && !formData.nombreOtroPermiso) {
-        newErrors.nombreOtroPermiso = 'Especifique el nombre del permiso';
+        newErrors.nombreOtroPermiso = 'Especifique el tipo de permiso';
     }
 
+    // Validaciones de saldo
     if (formData.tipoSolicitud === 'vacaciones' && formData.cantidadDias > bolsas.vacaciones) {
       newErrors.cantidadDias = `Saldo insuficiente (${bolsas.vacaciones} días)`;
     }
@@ -158,6 +143,10 @@ export const SolicitarDiasPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      // Datos automáticos para cumplir con el modelo de Django
+      const motivoAuto = `Solicitud de ${formData.tipoSolicitud.replace('_', ' ')}`;
+      const telefonoAuto = user?.telefono || 'No registrado';
+
       await solicitudService.create({
         tipo: formData.tipoSolicitud,
         nombre_otro_permiso: formData.nombreOtroPermiso,
@@ -165,15 +154,15 @@ export const SolicitarDiasPage: React.FC = () => {
         fecha_termino: formData.fechaTermino,
         cantidad_dias: formData.cantidadDias,
         es_medio_dia: formData.esMedioDia,
-        motivo: formData.motivo,
-        telefono_contacto: formData.telefonoContacto
+        motivo: motivoAuto,
+        telefono_contacto: telefonoAuto
       });
 
       setSubmitSuccess(true);
       cargarSaldos();
       setTimeout(() => {
         setSubmitSuccess(false);
-        setFormData(prev => ({ ...prev, fechaInicio: '', fechaTermino: '', cantidadDias: 0, motivo: '' }));
+        setFormData(prev => ({ ...prev, fechaInicio: '', fechaTermino: '', cantidadDias: 0 }));
       }, 3000);
     } catch (error: any) {
       setErrors({ submit: error.response?.data?.error || 'Error al procesar la solicitud' });
@@ -191,11 +180,10 @@ export const SolicitarDiasPage: React.FC = () => {
       <div className="min-h-screen bg-slate-50 p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
           
-          {/* ✅ CORRECCIÓN 3: Uso de submitSuccess en la UI */}
           {submitSuccess && (
             <div className="mb-6 bg-green-50 border border-green-200 p-4 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
                <AlertCircle className="text-green-600" />
-               <p className="text-green-800 font-bold">Solicitud enviada con éxito. Redirigiendo...</p>
+               <p className="text-green-800 font-bold">Solicitud enviada con éxito.</p>
             </div>
           )}
 
@@ -203,19 +191,20 @@ export const SolicitarDiasPage: React.FC = () => {
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white rounded-2xl shadow-sm border p-8">
                 <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-                  <FileText className="text-blue-500" /> Nueva Solicitud de Ausencia
+                  <FileText className="text-blue-500" /> Nueva Solicitud
                 </h2>
 
                 <form onSubmit={handleSubmit} className="space-y-8">
+                  {/* Selección de Tipo */}
                   <div className="space-y-4">
-                    <Label className="text-base font-bold">Selecciona el tipo de permiso</Label>
+                    <Label className="text-base font-bold">¿Qué deseas solicitar?</Label>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       {[
-                        { id: 'vacaciones', label: 'Vacaciones', icon: CalendarDays, color: 'blue' },
-                        { id: 'dia_administrativo', label: 'Día Admin.', icon: Briefcase, color: 'purple' },
-                        { id: 'devolucion_tiempo', label: 'Horas x Tiempo', icon: Clock, color: 'emerald' },
-                        { id: 'permiso_sin_goce', label: 'Sin Goce', icon: MinusCircle, color: 'orange' },
-                        { id: 'otro_permiso', label: 'Otros', icon: HelpCircle, color: 'slate' },
+                        { id: 'vacaciones', label: 'Vacaciones', icon: CalendarDays },
+                        { id: 'dia_administrativo', label: 'Día Admin.', icon: Briefcase },
+                        { id: 'devolucion_tiempo', label: 'Horas x Tiempo', icon: Clock },
+                        { id: 'permiso_sin_goce', label: 'Sin Goce', icon: MinusCircle },
+                        { id: 'otro_permiso', label: 'Otros', icon: HelpCircle },
                       ].map((tipo) => (
                         <button
                           key={tipo.id}
@@ -223,7 +212,7 @@ export const SolicitarDiasPage: React.FC = () => {
                           onClick={() => handleChange('tipoSolicitud', tipo.id as TipoSolicitud)}
                           className={`flex flex-col items-center p-4 rounded-xl border-2 transition-all ${
                             formData.tipoSolicitud === tipo.id 
-                            ? `border-blue-500 bg-blue-50 text-blue-700` 
+                            ? `border-blue-500 bg-blue-50 text-blue-700 shadow-sm` 
                             : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
                           }`}
                         >
@@ -236,9 +225,9 @@ export const SolicitarDiasPage: React.FC = () => {
 
                   {formData.tipoSolicitud === 'otro_permiso' && (
                     <div className="animate-in fade-in slide-in-from-top-2">
-                      <Label>Especifique el tipo de permiso *</Label>
+                      <Label>Especifique el motivo brevemente *</Label>
                       <Input 
-                        placeholder="Ej: Mudanza"
+                        placeholder="Ej: Mudanza, Trámite legal..."
                         value={formData.nombreOtroPermiso}
                         onChange={(e) => handleChange('nombreOtroPermiso', e.target.value)}
                         className={errors.nombreOtroPermiso ? "border-red-500" : ""}
@@ -253,6 +242,7 @@ export const SolicitarDiasPage: React.FC = () => {
                         type="date" 
                         value={formData.fechaInicio}
                         onChange={(e) => handleChange('fechaInicio', e.target.value)}
+                        className={errors.fechaInicio ? "border-red-500" : ""}
                       />
                     </div>
 
@@ -270,7 +260,7 @@ export const SolicitarDiasPage: React.FC = () => {
                   </div>
 
                   {(formData.tipoSolicitud === 'dia_administrativo' || formData.tipoSolicitud === 'otro_permiso') && (
-                    <div className="flex items-center space-x-2 bg-slate-50 p-3 rounded-lg border">
+                    <div className="flex items-center space-x-2 bg-slate-50 p-4 rounded-xl border border-dashed">
                       <Checkbox 
                         id="medio-dia" 
                         checked={formData.esMedioDia}
@@ -282,67 +272,47 @@ export const SolicitarDiasPage: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="bg-blue-900 text-white rounded-xl p-6 flex justify-between items-center">
+                  {/* Resumen Final */}
+                  <div className="bg-slate-900 text-white rounded-2xl p-6 flex justify-between items-center shadow-lg">
                     <div>
-                      <p className="text-blue-200 text-sm font-semibold">Total a solicitar:</p>
-                      <h3 className="text-3xl font-black">
+                      <p className="text-slate-400 text-sm font-semibold uppercase tracking-wider">Total a descontar:</p>
+                      <h3 className="text-4xl font-black">
                         {formData.cantidadDias} {formData.tipoSolicitud === 'devolucion_tiempo' ? 'Horas' : 'Días'}
                       </h3>
                     </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Motivo detallado *</Label>
-                      <Textarea 
-                        value={formData.motivo}
-                        onChange={(e) => handleChange('motivo', e.target.value)}
-                        className={errors.motivo ? "border-red-500" : ""}
-                      />
+                    <div className="bg-white/10 p-3 rounded-full">
+                       <FileText size={32} className="text-blue-400" />
                     </div>
                   </div>
 
-                  <div className="flex gap-3 pt-6">
-                    <Button type="submit" disabled={isSubmitting} className="flex-1 bg-blue-600">
-                      {isSubmitting ? "Enviando..." : <><Send className="mr-2 w-5 h-5" /> Enviar Solicitud</>}
+                  {errors.submit && (
+                    <p className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-lg border border-red-200">
+                      {errors.submit}
+                    </p>
+                  )}
+
+                  <div className="pt-4">
+                    <Button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700 h-14 text-lg font-bold shadow-md">
+                      {isSubmitting ? "Procesando..." : <><Send className="mr-2 w-5 h-5" /> Confirmar y Enviar Solicitud</>}
                     </Button>
+                    <p className="text-center text-xs text-slate-400 mt-4 italic">
+                      Al enviar, tu jefatura recibirá una notificación para su revisión.
+                    </p>
                   </div>
                 </form>
               </div>
             </div>
 
             <div className="space-y-6">
-              <div className="bg-white rounded-2xl shadow-sm border p-6">
-                <h3 className="font-bold text-slate-800 mb-4 border-b pb-2">Tus Saldos</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-100">
-                    <div className="flex items-center gap-3">
-                      <CalendarDays size={18} className="text-blue-500"/>
-                      <span className="text-sm font-bold text-blue-900">Vacaciones</span>
-                    </div>
-                    <span className="text-xl font-black text-blue-600">{bolsas.vacaciones}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-purple-50 rounded-xl border border-purple-100">
-                    <div className="flex items-center gap-3">
-                      <Briefcase size={18} className="text-purple-500"/>
-                      <span className="text-sm font-bold text-purple-900">Admin.</span>
-                    </div>
-                    <span className="text-xl font-black text-purple-600">{bolsas.administrativos}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-xl border border-emerald-100">
-                    <div className="flex items-center gap-3">
-                      <Clock size={18} className="text-emerald-500"/>
-                      <span className="text-sm font-bold text-emerald-900">Horas Extras</span>
-                    </div>
-                    <span className="text-xl font-black text-emerald-600">{bolsas.devolucionHoras}</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-orange-50 rounded-xl border border-orange-100">
-                    <div className="flex items-center gap-3">
-                      <MinusCircle size={18} className="text-orange-500"/>
-                      <span className="text-sm font-bold text-orange-900">Sin Goce</span>
-                    </div>
-                    <span className="text-xl font-black text-orange-600">{bolsas.sinGoce}</span>
-                  </div>
+              <div className="bg-white rounded-2xl shadow-sm border p-6 sticky top-24">
+                <h3 className="font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2">
+                  <Briefcase size={18} className="text-slate-400"/> Tus Saldos
+                </h3>
+                <div className="space-y-3">
+                  <SaldoItem label="Vacaciones" valor={bolsas.vacaciones} color="blue" icon={<CalendarDays size={16}/>} />
+                  <SaldoItem label="Admin. Disponibles" valor={bolsas.administrativos} color="purple" icon={<Briefcase size={16}/>} />
+                  <SaldoItem label="Horas a Devolver" valor={bolsas.devolucionHoras} color="emerald" icon={<Clock size={16}/>} />
+                  <SaldoItem label="Días Sin Goce" valor={bolsas.sinGoce} color="orange" icon={<MinusCircle size={16}/>} />
                 </div>
               </div>
             </div>
@@ -353,5 +323,16 @@ export const SolicitarDiasPage: React.FC = () => {
     </>
   );
 };
+
+// Componente auxiliar para los items de saldo
+const SaldoItem = ({ label, valor, color, icon }: { label: string, valor: number, color: string, icon: React.ReactNode }) => (
+  <div className={`flex items-center justify-between p-3 rounded-xl border border-${color}-100 bg-${color}-50/50`}>
+    <div className="flex items-center gap-2">
+      <span className={`text-${color}-600`}>{icon}</span>
+      <span className={`text-xs font-bold text-${color}-900`}>{label}</span>
+    </div>
+    <span className={`text-lg font-black text-${color}-700`}>{valor}</span>
+  </div>
+);
 
 export default SolicitarDiasPage;

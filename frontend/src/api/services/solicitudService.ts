@@ -34,6 +34,7 @@ export interface Solicitud {
   usuario: string; // UUID
   usuario_nombre: string;
   usuario_area: string;
+  usuario_cargo: string; // Asegúrate que el Serializer de Django envíe esto
   
   // Información de la solicitud
   tipo: TipoSolicitud;
@@ -48,15 +49,15 @@ export interface Solicitud {
   motivo: string;
   telefono_contacto: string;
   
-  // Estado y Aprobaciones
+  // Estado y Aprobaciones (Nombres sincronizados con Django models.py)
   estado: EstadoSolicitud;
   estado_display: string;
   
   jefatura_aprobador_nombre: string | null;
-  fecha_aprobacion_jefatura: string | null;
+  fecha_aprobacion_jefatura: string | null; // Sincronizado con backend
   
   direccion_aprobador_nombre: string | null;
-  fecha_aprobacion_direccion: string | null;
+  fecha_aprobacion_direccion: string | null; // Sincronizado con backend
   
   comentarios_administracion: string;
   
@@ -101,6 +102,25 @@ class SolicitudService {
   }
 
   /**
+   * Métodos para el panel de administración (AprobacionesAdminPage)
+   * Nota: El filtrado por área ya lo hace el backend en get_queryset
+   */
+  async getPendientes(): Promise<Solicitud[]> {
+    // Obtenemos las solicitudes. El backend filtrará automáticamente
+    // según el nivel del usuario logueado.
+    return this.getAll();
+  }
+
+  async getMisAprobaciones(): Promise<Solicitud[]> {
+    // Filtrar las que ya están aprobadas o rechazadas por el usuario actual
+    return this.getAll({ estado: 'aprobada' });
+  }
+
+  async getHistorialCompleto(): Promise<Solicitud[]> {
+    return this.getAll();
+  }
+
+  /**
    * Obtener detalle de una solicitud
    */
   async getById(id: string): Promise<Solicitud> {
@@ -109,7 +129,7 @@ class SolicitudService {
   }
 
   /**
-   * Crear nueva solicitud (Vacaciones, Administrativos, Sin Goce, Devolución u Otros)
+   * Crear nueva solicitud
    */
   async create(data: CrearSolicitudDTO): Promise<Solicitud> {
     const response = await axios.post(`${this.baseURL}/`, data);
@@ -117,7 +137,7 @@ class SolicitudService {
   }
 
   /**
-   * Aprobación/Rechazo por parte de Jefatura (Nivel 2)
+   * Aprobación por parte de Jefatura (Nivel 2)
    */
   async aprobarJefatura(id: string, data: AprobarRechazarDTO): Promise<any> {
     const response = await axios.post(`${this.baseURL}/${id}/aprobar_jefatura/`, data);
@@ -125,7 +145,7 @@ class SolicitudService {
   }
 
   /**
-   * Aprobación/Rechazo por parte de Dirección o Subdirección (Nivel 3 y 4)
+   * Aprobación por parte de Dirección o Subdirección (Nivel 3 y 4)
    */
   async aprobarDireccion(id: string, data: AprobarRechazarDTO): Promise<any> {
     const response = await axios.post(`${this.baseURL}/${id}/aprobar_direccion/`, data);
@@ -133,7 +153,8 @@ class SolicitudService {
   }
 
   /**
-   * Método polimórfico para aprobar según el rol del usuario
+   * Método polimórfico para aprobar según el nivel del usuario
+   * @param userNivel Debe ser el nivel numérico (1, 2, 3, 4)
    */
   async aprobar(id: string, data: AprobarRechazarDTO, userNivel: number): Promise<any> {
     if (userNivel >= 3) {
@@ -143,7 +164,14 @@ class SolicitudService {
   }
 
   /**
-   * El usuario anula su propia solicitud (solo si está pendiente)
+   * Rechazar una solicitud (es una aprobación con valor false)
+   */
+  async rechazar(id: string, data: { comentarios: string }, userNivel: number): Promise<any> {
+    return this.aprobar(id, { aprobar: false, ...data }, userNivel);
+  }
+
+  /**
+   * El usuario anula su propia solicitud
    */
   async anularUsuario(id: string): Promise<any> {
     const response = await axios.post(`${this.baseURL}/${id}/anular_usuario/`);
@@ -159,7 +187,7 @@ class SolicitudService {
   }
 
   /**
-   * Dirección confirma la anulación por licencia (Nivel >= 3)
+   * Dirección confirma la anulación por licencia
    */
   async finalizarAnulacionLicencia(id: string): Promise<any> {
     const response = await axios.post(`${this.baseURL}/${id}/finalizar_anulacion_licencia/`);
@@ -167,7 +195,7 @@ class SolicitudService {
   }
 
   /**
-   * Helper: Calcular días hábiles (Lunes-Viernes)
+   * Helper: Calcular días hábiles
    */
   calcularDiasHabiles(fechaInicio: string, fechaFin: string): number {
     if (!fechaInicio || !fechaFin) return 0;
@@ -185,17 +213,10 @@ class SolicitudService {
     return count;
   }
 
-  /**
-   * Obtener URL para visualización/descarga de PDF
-   */
   getPDFUrl(id: string): string {
     return `${axios.defaults.baseURL}${this.baseURL}/${id}/descargar_pdf/`;
   }
 }
-
-// ======================================================
-// EXPORT
-// ======================================================
 
 export const solicitudService = new SolicitudService();
 export default solicitudService;

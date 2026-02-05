@@ -10,7 +10,8 @@ from .views import (
     SolicitudViewSet, LicenciaMedicaViewSet,
     ActividadViewSet, AnuncioViewSet,
     DocumentoViewSet, CategoriaDocumentoViewSet,
-    NotificacionViewSet, LogAuditoriaViewSet
+    NotificacionViewSet, LogAuditoriaViewSet,
+    TipoContratoViewSet
 )
 
 # ======================================================
@@ -23,6 +24,7 @@ router = DefaultRouter()
 router.register(r'usuarios', UsuarioViewSet, basename='usuario')
 router.register(r'roles', RolViewSet, basename='rol')
 router.register(r'areas', AreaViewSet, basename='area')
+router.register(r'tipos-contrato', TipoContratoViewSet, basename='tipo-contrato')
 router.register(r'solicitudes', SolicitudViewSet, basename='solicitud')
 router.register(r'licencias', LicenciaMedicaViewSet, basename='licencia')
 router.register(r'actividades', ActividadViewSet, basename='actividad')

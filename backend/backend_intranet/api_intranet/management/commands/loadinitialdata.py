@@ -15,7 +15,7 @@ class Command(BaseCommand):
         self.stdout.write('Iniciando carga de datos...')
         
         # ======================================================
-        # 1. CREAR TIPOS DE CONTRATO (NUEVO)
+        # 1. CREAR TIPOS DE CONTRATO
         # ======================================================
         self.stdout.write('\n📄 Creando Tipos de Contrato...')
         
@@ -100,7 +100,7 @@ class Command(BaseCommand):
             self.stdout.write(f'  ✓ {area.nombre}')
 
         # ======================================================
-        # 4. CREAR USUARIOS INICIALES (Actualizado con nuevos campos)
+        # 4. CREAR USUARIOS INICIALES
         # ======================================================
         self.stdout.write('\n👥 Creando Usuarios...')
 
@@ -120,7 +120,6 @@ class Command(BaseCommand):
                 'is_staff': True,
                 'is_superuser': True,
                 'es_jefe_de_area': True,
-                # Nuevos campos de saldos
                 'dias_vacaciones_disponibles': 25,
                 'dias_administrativos_disponibles': Decimal('6.0'),
             }
@@ -172,13 +171,41 @@ class Command(BaseCommand):
                 'tipo_contrato': contrato_contrata,
                 'fecha_ingreso': timezone.now().date(),
                 'dias_vacaciones_disponibles': 15,
-                'dias_administrativos_disponibles': Decimal('4.5'), # Ejemplo con medio día usado
-                'horas_devolucion_disponibles': Decimal('12.5'),   # Horas extra acumuladas
+                'dias_administrativos_disponibles': Decimal('4.5'),
+                'horas_devolucion_disponibles': Decimal('12.5'),
             }
         )
         if created:
             enfermero.set_password('user123')
             enfermero.save()
             self.stdout.write(f'  ✓ {enfermero.get_nombre_completo()} (Funcionario)')
+        
+        # 4.4 Jefatura de Área (Enfermería) - MODIFICADO
+        jefe_enfermeria, created = Usuario.objects.get_or_create(
+            rut='15.555.666-7',
+            defaults={
+                'email': 'jefe.enfermeria@cesfam.cl',
+                'nombre': 'Ricardo',
+                'apellido_paterno': 'Soto',
+                'apellido_materno': 'Méndez',
+                'cargo': 'Enfermero Coordinador Jefe',
+                'area': areas_creadas['Enfermería'],
+                'rol': roles_creados['Jefatura de Área'],
+                'tipo_contrato': contrato_planta,
+                'fecha_ingreso': timezone.now().date(),
+                'es_jefe_de_area': True,
+                'dias_vacaciones_disponibles': 20,
+                'dias_administrativos_disponibles': Decimal('6.0'),
+                'horas_devolucion_disponibles': Decimal('0.0'),
+            }
+        )
+        if created:
+            jefe_enfermeria.set_password('admin123')
+            jefe_enfermeria.save()
+            # Asignar como jefe oficial del objeto Area
+            area_enf = areas_creadas['Enfermería']
+            area_enf.jefe = jefe_enfermeria
+            area_enf.save()
+            self.stdout.write(f'  ✓ {jefe_enfermeria.get_nombre_completo()} (Jefe de Enfermería)')
 
         self.stdout.write(self.style.SUCCESS('\n✅ Proceso completado exitosamente!'))
