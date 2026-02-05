@@ -1,7 +1,4 @@
-// ======================================================
-// PÁGINA ADMIN: Aprobar/Rechazar Solicitudes
-// Ubicación: src/pages/admin/AprobacionesAdminPage.tsx
-// ======================================================
+// src/pages/admin/AprobacionesAdminPage.tsx
 
 'use client';
 
@@ -14,10 +11,8 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-
-  Download,
   AlertCircle
-} from 'lucide-react'; // ✅ Eliminados: User, Filter, Send (no se usaban)
+} from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -42,10 +37,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-// ======================================================
-// UTILIDADES
-// ======================================================
-
 const formatearFecha = (fecha: string): string => {
   return new Date(fecha).toLocaleDateString('es-CL', {
     day: '2-digit',
@@ -55,105 +46,68 @@ const formatearFecha = (fecha: string): string => {
 };
 
 const getTipoBadge = (tipo: TipoSolicitud) => {
-  return tipo === 'vacaciones' ? (
+  const labels: Record<string, string> = {
+    'vacaciones': 'Vacaciones',
+    'dia_administrativo': 'Día Administrativo',
+    'permiso_sin_goce': 'Permiso Sin Goce',
+    'devolucion_tiempo': 'Devolución de Tiempo',
+    'otro_permiso': 'Otro Permiso'
+  };
+  return (
     <Badge className="bg-blue-100 text-blue-800 border-blue-200 border">
-      Vacaciones
-    </Badge>
-  ) : (
-    <Badge className="bg-purple-100 text-purple-800 border-purple-200 border">
-      Días Administrativos
+      {labels[tipo] || tipo}
     </Badge>
   );
 };
 
 const getEstadoBadge = (estado: string) => {
-  switch (estado) {
-    case 'pendiente_jefatura':
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 border flex items-center gap-1">
-          <Clock className="w-3 h-3" />
-          Pendiente Jefatura
-        </Badge>
-      );
-    case 'pendiente_direccion':
-      return (
-        <Badge className="bg-orange-100 text-orange-800 border-orange-200 border flex items-center gap-1">
-          <Clock className="w-3 h-3" />
-          Pendiente Dirección
-        </Badge>
-      );
-    case 'aprobada':
-      return (
-        <Badge className="bg-green-100 text-green-800 border-green-200 border flex items-center gap-1">
-          <CheckCircle className="w-3 h-3" />
-          Aprobada
-        </Badge>
-      );
-    case 'rechazada':
-      return (
-        <Badge className="bg-red-100 text-red-800 border-red-200 border flex items-center gap-1">
-          <XCircle className="w-3 h-3" />
-          Rechazada
-        </Badge>
-      );
-    default:
-      return (
-        <Badge className="bg-gray-100 text-gray-800 border-gray-200 border flex items-center gap-1">
-          <Clock className="w-3 h-3" />
-          {estado}
-        </Badge>
-      );
-  }
-};
+  const config: Record<string, { label: string; color: string; icon: any }> = {
+    pendiente_jefatura: { label: 'Pte. Jefatura', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Clock },
+    pendiente_direccion: { label: 'Pte. Dirección', color: 'bg-orange-100 text-orange-800 border-orange-200', icon: Clock },
+    aprobada: { label: 'Aprobada', color: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle },
+    rechazada: { label: 'Rechazada', color: 'bg-red-100 text-red-800 border-red-200', icon: XCircle },
+  };
 
-// ======================================================
-// COMPONENTE PRINCIPAL
-// ======================================================
+  const item = config[estado] || { label: estado, color: 'bg-gray-100 text-gray-800', icon: Clock };
+  const Icon = item.icon;
+
+  return (
+    <Badge className={`${item.color} border flex items-center gap-1`}>
+      <Icon className="w-3 h-3" />
+      {item.label}
+    </Badge>
+  );
+};
 
 export const AprobacionesAdminPage: React.FC = () => {
   const { user } = useAuth();
 
-  // Estados
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([]);
   const [filteredSolicitudes, setFilteredSolicitudes] = useState<Solicitud[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
-  
   const [vistaActual, setVistaActual] = useState<'pendientes' | 'mis_aprobaciones' | 'historial_completo'>('pendientes');
 
-  // Modal
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'aprobar' | 'rechazar'>('aprobar');
   const [selectedSolicitud, setSelectedSolicitud] = useState<Solicitud | null>(null);
   const [comentario, setComentario] = useState('');
   const [processing, setProcessing] = useState(false);
 
-  // Filtros
   const [filtroTipo, setFiltroTipo] = useState<TipoSolicitud | 'TODOS'>('TODOS');
   const [filtroArea, setFiltroArea] = useState<string>('TODOS');
 
-  // ======================================================
-  // EFECTOS
-  // ======================================================
-
   useEffect(() => {
-    if (user?.id) {
-      cargarSolicitudes();
-    }
+    if (user?.id) cargarSolicitudes();
   }, [user, vistaActual]);
 
   useEffect(() => {
     aplicarFiltros();
   }, [solicitudes, filtroTipo, filtroArea]);
 
-  // ======================================================
-  // FUNCIONES
-  // ======================================================
-
   const cargarSolicitudes = async () => {
     if (!user) return;
-
     try {
       setLoading(true);
       setError('');
@@ -203,51 +157,38 @@ export const AprobacionesAdminPage: React.FC = () => {
     setModalOpen(true);
   };
 
-  const cerrarModal = () => {
-    setModalOpen(false);
-    setSelectedSolicitud(null);
-    setComentario('');
-  };
-
-  const handleAprobar = async () => {
+  const handleAccion = async () => {
     if (!selectedSolicitud || !user) return;
-    setProcessing(true);
-    try {
-      await solicitudService.aprobar(
-        selectedSolicitud.id, 
-        { aprobar: true, comentarios: comentario.trim() || undefined },
-        user.rol_nivel ?? 1 // ✅ Corregido: Se agregó ?? 1 para evitar el error de 'undefined'
-      );
-      setSuccessMessage(`Solicitud de ${selectedSolicitud.usuario_nombre} aprobada`);
-      await cargarSolicitudes();
-      cerrarModal();
-      setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Error al aprobar');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleRechazar = async () => {
-    if (!selectedSolicitud || !user) return;
-    if (!comentario.trim()) {
-      setError('Debes proporcionar un motivo para rechazar');
+    if (modalType === 'rechazar' && !comentario.trim()) {
+      setError('El comentario es obligatorio para rechazar.');
       return;
     }
+
     setProcessing(true);
     try {
-      await solicitudService.rechazar(
-        selectedSolicitud.id, 
-        { comentarios: comentario.trim() },
-        user.rol_nivel ?? 1 // ✅ Corregido: Se agregó ?? 1 para evitar el error de 'undefined'
-      );
-      setSuccessMessage(`Solicitud de ${selectedSolicitud.usuario_nombre} rechazada`);
+      // ✅ FIX: Usamos ?? 1 para asegurar que siempre sea un número (elimina error TS)
+      const nivelUsuario = user.rol_nivel ?? 1;
+
+      if (modalType === 'aprobar') {
+        await solicitudService.aprobar(
+          selectedSolicitud.id, 
+          { aprobar: true, comentarios: comentario }, 
+          nivelUsuario
+        );
+      } else {
+        await solicitudService.rechazar(
+          selectedSolicitud.id, 
+          { comentarios: comentario }, 
+          nivelUsuario
+        );
+      }
+      
+      setSuccessMessage(`Solicitud de ${selectedSolicitud.usuario_nombre} ${modalType === 'aprobar' ? 'aprobada' : 'rechazada'}`);
       await cargarSolicitudes();
-      cerrarModal();
+      setModalOpen(false);
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Error al rechazar');
+      setError('Error al procesar la solicitud.');
     } finally {
       setProcessing(false);
     }
@@ -263,134 +204,119 @@ export const AprobacionesAdminPage: React.FC = () => {
       <div className="h-16" />
       <BannerAprobaciones />
       
-      <div className="flex-1 bg-gradient-to-br from-gray-50 via-blue-50 to-cyan-50 p-4 md:p-8">
-        <div className="max-w-[1600px] mx-auto">
+      <div className="max-w-[1600px] mx-auto p-4 md:p-8">
+        {successMessage && <Alert className="mb-6 bg-green-50 text-green-800 border-green-200"><CheckCircle className="h-4 w-4" /><AlertDescription>{successMessage}</AlertDescription></Alert>}
+        {error && <Alert className="mb-6 bg-red-50 text-red-800 border-red-200"><AlertCircle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert>}
+
+        <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap gap-4 items-center justify-between">
+          <div className="flex gap-2">
+            <Button onClick={() => setVistaActual('pendientes')} variant={vistaActual === 'pendientes' ? 'default' : 'outline'}>Pendientes</Button>
+            <Button onClick={() => setVistaActual('mis_aprobaciones')} variant={vistaActual === 'mis_aprobaciones' ? 'default' : 'outline'}>Historial</Button>
+          </div>
           
-          <div className="bg-white rounded-2xl shadow-md p-6 mb-6">
-            <p className="text-sm text-gray-600">Gestión de aprobaciones administrativas.</p>
+          <div className="flex gap-4">
+            <Select value={filtroTipo} onValueChange={(v: any) => setFiltroTipo(v)}>
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="TODOS">Todos los tipos</SelectItem>
+                <SelectItem value="vacaciones">Vacaciones</SelectItem>
+                <SelectItem value="dia_administrativo">Días Admin.</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={filtroArea} onValueChange={setFiltroArea}>
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Área" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="TODOS">Todas las áreas</SelectItem>
+                {areasUnicas.map(area => <SelectItem key={area} value={area}>{area}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
-
-          {successMessage && <Alert className="mb-6 bg-green-50 border-green-200 text-green-800"><CheckCircle className="h-4 w-4" /><AlertDescription>{successMessage}</AlertDescription></Alert>}
-          {error && <Alert className="mb-6 bg-red-50 border-red-200 text-red-800"><AlertCircle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert>}
-
-          {/* Estadísticas */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div className="bg-white rounded-lg shadow p-6 flex items-center gap-4">
-              <div className="p-3 bg-yellow-100 rounded-lg"><Clock className="w-6 h-6 text-yellow-600" /></div>
-              <div><p className="text-gray-500 text-sm">Totales</p><p className="text-3xl font-bold">{solicitudes.length}</p></div>
-            </div>
-            {/* ... más estadísticas ... */}
-          </div>
-
-          {/* Vistas y Filtros */}
-          <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-col gap-4">
-            <div className="flex gap-2">
-              <Button onClick={() => setVistaActual('pendientes')} variant={vistaActual === 'pendientes' ? 'default' : 'outline'}>Pendientes</Button>
-              <Button onClick={() => setVistaActual('mis_aprobaciones')} variant={vistaActual === 'mis_aprobaciones' ? 'default' : 'outline'}>Mis Aprobaciones</Button>
-            </div>
-            
-            <div className="flex gap-4 border-t pt-4">
-              <Select value={filtroTipo} onValueChange={(v: any) => setFiltroTipo(v)}>
-                <SelectTrigger className="w-[180px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="TODOS">Todos los tipos</SelectItem>
-                  <SelectItem value="vacaciones">Vacaciones</SelectItem>
-                  <SelectItem value="dia_administrativo">Días Admin.</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={filtroArea} onValueChange={setFiltroArea}>
-                <SelectTrigger className="w-[180px]"><SelectValue placeholder="Área" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="TODOS">Todas las áreas</SelectItem>
-                  {areasUnicas.map(area => <SelectItem key={area} value={area}>{area}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Lista de tarjetas */}
-          {loading ? (
-             <div className="text-center py-12"><div className="animate-spin h-8 w-8 border-b-2 border-blue-500 mx-auto"></div></div>
-          ) : filteredSolicitudes.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-lg shadow"><p className="text-gray-500">No hay solicitudes para mostrar.</p></div>
-          ) : (
-            <div className="space-y-4">
-              {filteredSolicitudes.map((solicitud) => (
-                <div key={solicitud.id} className="bg-white rounded-lg shadow p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex gap-3">
-                      <div className="p-3 bg-blue-50 rounded-lg"><CalendarDays className="text-blue-500" /></div>
-                      <div>
-                        <div className="flex gap-2 mb-1">{getTipoBadge(solicitud.tipo)}{getEstadoBadge(solicitud.estado)}</div>
-                        <p className="text-xs text-gray-500">{formatearFecha(solicitud.creada_en)}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg text-sm mb-4">
-                    <div><p className="text-gray-500">Solicitante</p><p className="font-bold">{solicitud.usuario_nombre}</p></div>
-                    <div><p className="text-gray-500">Área</p><p className="font-bold">{solicitud.usuario_area}</p></div>
-                    <div><p className="text-gray-500">Días</p><p className="font-bold">{solicitud.cantidad_dias}</p></div>
-                  </div>
-
-                  <div className="bg-white border rounded-lg p-4 mb-4">
-                    <p className="text-xs text-gray-400 uppercase font-bold mb-1">Motivo</p>
-                    <p className="text-sm">{solicitud.motivo}</p>
-                  </div>
-
-                  {/* Fechas de aprobación */}
-                  <div className="grid md:grid-cols-2 gap-4 text-xs mb-4">
-                    <div className="p-3 bg-gray-50 rounded border">
-                      <p className="font-bold text-gray-500 mb-1">JEFATURA</p>
-                      <p>{solicitud.jefatura_aprobador_nombre || 'Pendiente'}</p>
-                      {solicitud.fecha_aprobacion_jefatura && <p className="text-blue-600">{formatearFecha(solicitud.fecha_aprobacion_jefatura)}</p>}
-                    </div>
-                    <div className="p-3 bg-gray-50 rounded border">
-                      <p className="font-bold text-gray-500 mb-1">DIRECCIÓN</p>
-                      <p>{solicitud.direccion_aprobador_nombre || 'Pendiente'}</p>
-                      {solicitud.fecha_aprobacion_direccion && <p className="text-blue-600">{formatearFecha(solicitud.fecha_aprobacion_direccion)}</p>}
-                    </div>
-                  </div>
-
-                  {solicitud.url_pdf && (
-                    <Button variant="outline" size="sm" onClick={() => window.open(solicitud.url_pdf, '_blank')} className="mb-4">
-                      <Download className="w-4 h-4 mr-2" /> Ver PDF
-                    </Button>
-                  )}
-
-                  {vistaActual === 'pendientes' && (
-                    <div className="flex gap-3 pt-4 border-t">
-                      <Button onClick={() => abrirModal(solicitud, 'aprobar')} className="flex-1 bg-green-600 hover:bg-green-700">Aprobar</Button>
-                      <Button onClick={() => abrirModal(solicitud, 'rechazar')} variant="outline" className="flex-1 text-red-600 border-red-600">Rechazar</Button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
+
+        {loading ? (
+          <div className="text-center py-20"><div className="animate-spin h-10 w-10 border-b-2 border-blue-600 mx-auto" /></div>
+        ) : filteredSolicitudes.length === 0 ? (
+          <div className="bg-white rounded-lg p-20 text-center text-gray-500 border shadow-sm">No hay solicitudes en esta sección.</div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
+            {filteredSolicitudes.map((sol) => (
+              <div key={sol.id} className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex gap-4">
+                    <div className="bg-blue-50 p-3 rounded-lg"><CalendarDays className="text-blue-600 w-6 h-6" /></div>
+                    <div>
+                      <div className="flex gap-2 mb-1">{getTipoBadge(sol.tipo)}{getEstadoBadge(sol.estado)}</div>
+                      <p className="text-xs text-gray-400">Solicitado el {formatearFecha(sol.creada_en)}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-lg font-bold text-gray-700">{sol.cantidad_dias} días</span>
+                    <p className="text-xs text-gray-400">Nº {sol.numero_solicitud}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50 p-4 rounded-lg mb-4">
+                  <div><p className="text-xs text-gray-400 uppercase font-bold">Funcionario</p><p className="font-semibold text-gray-800">{sol.usuario_nombre}</p></div>
+                  <div><p className="text-xs text-gray-400 uppercase font-bold">Área</p><p className="text-gray-700">{sol.usuario_area}</p></div>
+                  <div><p className="text-xs text-gray-400 uppercase font-bold">Periodo</p><p className="text-gray-700">{formatearFecha(sol.fecha_inicio)} al {formatearFecha(sol.fecha_termino)}</p></div>
+                </div>
+
+                <div className="mb-6">
+                  <p className="text-xs text-gray-400 uppercase font-bold mb-1">Motivo / Justificación</p>
+                  <p className="text-sm text-gray-600 italic">"{sol.motivo}"</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div className={`p-3 rounded-lg border ${sol.jefatura_aprobador_nombre ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100'}`}>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase">Visto Jefatura</p>
+                    <p className="text-sm font-medium">{sol.jefatura_aprobador_nombre || 'Pendiente'}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg border ${sol.direccion_aprobador_nombre ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100'}`}>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase">Visto Dirección</p>
+                    <p className="text-sm font-medium">{sol.direccion_aprobador_nombre || 'Pendiente'}</p>
+                  </div>
+                </div>
+
+                {vistaActual === 'pendientes' && (
+                  <div className="flex gap-4 pt-4 border-t">
+                    <Button onClick={() => abrirModal(sol, 'aprobar')} className="flex-1 bg-green-600 hover:bg-green-700 text-white">Aprobar</Button>
+                    <Button onClick={() => abrirModal(sol, 'rechazar')} variant="outline" className="flex-1 border-red-200 text-red-600 hover:bg-red-50">Rechazar</Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Modal de Acción */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{modalType === 'aprobar' ? 'Aprobar' : 'Rechazar'} Solicitud</DialogTitle>
-            <DialogDescription>{selectedSolicitud && `Usuario: ${selectedSolicitud.usuario_nombre}`}</DialogDescription>
+            <DialogDescription>
+              {selectedSolicitud && `Se procesará la solicitud Nº ${selectedSolicitud.numero_solicitud} de ${selectedSolicitud.usuario_nombre}.`}
+            </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label className="mb-2 block">Comentarios {modalType === 'rechazar' && '(Obligatorio)'}</Label>
-            <Textarea value={comentario} onChange={(e) => setComentario(e.target.value)} placeholder="Escriba aquí..." rows={4} />
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Comentarios {modalType === 'rechazar' && '(Obligatorio para rechazar)'}</Label>
+              <Textarea 
+                value={comentario} 
+                onChange={(e) => setComentario(e.target.value)}
+                placeholder="Escribe un comentario o motivo..."
+                className="min-h-[100px]"
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={cerrarModal}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
             <Button 
-              onClick={modalType === 'aprobar' ? handleAprobar : handleRechazar} 
+              onClick={handleAccion} 
               disabled={processing || (modalType === 'rechazar' && !comentario.trim())}
-              className={modalType === 'aprobar' ? 'bg-green-600' : 'bg-red-600'}
+              className={modalType === 'aprobar' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
             >
-              {processing ? 'Procesando...' : 'Confirmar'}
+              {processing ? 'Procesando...' : 'Confirmar Acción'}
             </Button>
           </DialogFooter>
         </DialogContent>
