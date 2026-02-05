@@ -205,6 +205,28 @@ class SolicitudViewSet(viewsets.ModelViewSet):
         solicitud.save()
         return Response({'message': 'Solicitud anulada por licencia. Ajuste los días manualmente.'})
 
+    @action(detail=True, methods=['get'])
+    def descargar_pdf(self, request, pk=None):
+        solicitud = self.get_object()
+        
+        # Solo permitimos descargar si está aprobada
+        if solicitud.estado != 'aprobada':
+            return Response(
+                {'error': 'La solicitud aún no ha sido aprobada completamente.'}, 
+                status=400
+            )
+        
+        try:
+            buffer = generar_pdf_solicitud(solicitud)
+            return FileResponse(
+                buffer, 
+                as_attachment=True, 
+                filename=f'Solicitud_{solicitud.numero_solicitud}.pdf',
+                content_type='application/pdf'
+            )
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
 # ======================================================
 # LICENCIA MÉDICA VIEWSET
 # ======================================================

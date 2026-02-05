@@ -208,7 +208,7 @@ class SolicitudDetailSerializer(serializers.ModelSerializer):
 
 
 class SolicitudCreateSerializer(serializers.ModelSerializer):
-    """Serializer para crear solicitud con validación de Otros Permisos"""
+    """Serializer para crear solicitud con validación de saldos y tipos"""
     class Meta:
         model = Solicitud
         fields = [
@@ -217,15 +217,46 @@ class SolicitudCreateSerializer(serializers.ModelSerializer):
         ]
     
     def validate(self, data):
-        # 1. Validar fechas
+        # 1. Obtener el usuario desde el request context
+        user = self.context['request'].user
+        tipo = data.get('tipo')
+        cantidad = data.get('cantidad_dias', 0)
+
+        # 2. Validar fechas básicas
         if data['fecha_inicio'] > data['fecha_termino']:
-            raise serializers.ValidationError("La fecha de inicio debe ser anterior a la de término")
+            raise serializers.ValidationError({
+                "fecha_termino": "La fecha de inicio debe ser anterior a la de término"
+            })
         
-        # 2. Validar Nombre de otro permiso
-        if data.get('tipo') == 'otro_permiso' and not data.get('nombre_otro_permiso'):
+        # 3. Validar Nombre de otro permiso si corresponde
+        if tipo == 'otro_permiso' and not data.get('nombre_otro_permiso'):
             raise serializers.ValidationError({
                 "nombre_otro_permiso": "Debe especificar el nombre del permiso si selecciona 'Otros Permisos'."
             })
+
+        # 4. --- VALIDACIÓN DE SALDOS ---
+        
+        if tipo == 'vacaciones':
+            # Validar que no pida decimales en vacaciones (según tu lógica de modelo)
+            if cantidad % 1 != 0:
+                raise serializers.ValidationError({"cantidad_dias": "Las vacaciones solo pueden pedirse por días enteros."})
+            
+            if cantidad > user.dias_vacaciones_disponibles:
+                raise serializers.ValidationError({
+                    "cantidad_dias": f"Días de vacaciones insuficientes. Disponibles: {user.dias_vacaciones_disponibles}"
+                })
+
+        elif tipo == 'dia_administrativo':
+            if cantidad > user.dias_administrativos_disponibles:
+                raise serializers.ValidationError({
+                    "cantidad_dias": f"Días administrativos insuficientes. Disponibles: {user.dias_administrativos_disponibles}"
+                })
+
+        elif tipo == 'devolucion_tiempo':
+            if cantidad > user.horas_devolucion_disponibles:
+                raise serializers.ValidationError({
+                    "cantidad_dias": f"Horas de devolución insuficientes. Disponibles: {user.horas_devolucion_disponibles}"
+                })
             
         return data
 
